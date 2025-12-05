@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 214 32% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 214 32% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 214 32% 15%;
+
+    --primary: 214 100% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 214 15% 93%;
+    --secondary-foreground: 214 32% 25%;
+
+    --muted: 210 15% 95%;
+    --muted-foreground: 214 15% 45%;
+
+    --accent: 214 80% 95%;
+    --accent-foreground: 214 100% 35%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 214 100% 40%;
+
+    --radius: 0.5rem;
+
+    --chart-1: 214 100% 40%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 262 83% 58%;
+    --chart-5: 340 75% 55%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 214 32% 15%;
+    --sidebar-primary: 214 100% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 214 80% 95%;
+    --sidebar-accent-foreground: 214 100% 35%;
+    --sidebar-border: 214 20% 90%;
+    --sidebar-ring: 214 100% 40%;
+
+    /* Custom tokens */
+    --gradient-primary: linear-gradient(135deg, hsl(214 100% 40%), hsl(214 100% 50%));
+    --gradient-hero: linear-gradient(135deg, hsl(214 100% 35%), hsl(230 80% 45%));
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-card-hover: 0 10px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --shadow-elevated: 0 20px 40px -10px rgb(0 82 204 / 0.2);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .card-hover {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .animate-fade-up {
+    animation: fadeUp 0.5s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
