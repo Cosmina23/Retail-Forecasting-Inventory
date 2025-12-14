@@ -5,15 +5,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { apiService } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Login = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/index");
+    setIsLoading(true);
+
+    try {
+      await apiService.login(email, password);
+      toast({
+        title: "Success!",
+        description: "Logged in successfully",
+      });
+      navigate("/index");
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Login failed",
+        description: error.message || "Invalid email or password",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -71,8 +92,8 @@ const Login = () => {
             </label>
           </div>
 
-          <Button type="submit" variant="hero" size="xl" className="w-full">
-            Sign In
+          <Button type="submit" variant="hero" size="xl" className="w-full" disabled={isLoading}>
+            {isLoading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
 

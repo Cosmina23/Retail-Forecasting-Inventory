@@ -5,19 +5,40 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { apiService } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Register = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
     password: "",
     companyName: "",
   });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate("/setup");
+    setIsLoading(true);
+
+    try {
+      await apiService.register(formData.email, formData.password, formData.fullName);
+      toast({
+        title: "Success!",
+        description: "Account created successfully",
+      });
+      navigate("/setup");
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Registration failed",
+        description: error.message || "Could not create account",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,8 +128,8 @@ const Register = () => {
             </label>
           </div>
 
-          <Button type="submit" variant="hero" size="xl" className="w-full">
-            Sign Up Free
+          <Button type="submit" variant="hero" size="xl" className="w-full" disabled={isLoading}>
+            {isLoading ? "Creating Account..." : "Sign Up Free"}
           </Button>
         </form>
 

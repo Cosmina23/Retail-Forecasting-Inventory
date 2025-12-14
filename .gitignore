@@ -1,0 +1,231 @@
+# ===================================
+# Python / Backend
+# ===================================
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+backend/venv/
+backend/.venv/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment Variables (IMPORTANT - contains secrets!)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# ===================================
+# Node.js / Frontend
+# ===================================
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+jspm_packages/
+
+# Build output
+dist/
+build/
+.next/
+out/
+frontend/dist/
+frontend/build/
+
+# Lock files (keep package-lock.json but ignore yarn.lock if not used)
+# Uncomment if you use bun exclusively:
+# package-lock.json
+# yarn.lock
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.DS_Store
+*.pem
+.npm
+.eslintcache
+.cache/
+
+# ===================================
+# Database
+# ===================================
+
+# SQLite
+*.sqlite
+*.sqlite3
+*.db
+
+# MongoDB dumps
+*.bson
+dump/
+
+# Database backups
+*.sql
+*.dump
+
+# ===================================
+# Docker
+# ===================================
+
+# Docker volumes data (usually handled by docker-compose)
+# Uncomment if you want to ignore:
+# volumes/
+# data/
+
+# ===================================
+# IDEs & Editors
+# ===================================
+
+# VS Code
+.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains IDEs (PyCharm, WebStorm, IntelliJ)
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ===================================
+# Operating System
+# ===================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ===================================
+# Temporary Files
+# ===================================
+
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# ===================================
+# Security & Secrets
+# ===================================
+
+# SSH Keys
+*.pem
+*.key
+*.cert
+*.crt
+
+# Secrets
+secrets/
+.secrets/
+*.secret
+
+# JWT Keys
+private.key
+public.key
+
+# ===================================
+# Project Specific
+# ===================================
+
+# Test files
+test.txt
+temp/
+scratch/
+
+# User uploaded files (if any)
+uploads/
+media/
+
+# Documentation builds
+docs/_build/
+site/
