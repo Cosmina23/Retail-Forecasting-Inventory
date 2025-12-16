@@ -1,4 +1,4 @@
-from app.models.schemas import HealthCheck
+from models import HealthCheck
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv

@@ -3,14 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet } from "lucide-react";
+import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet, Loader2 } from "lucide-react";
+import { apiService } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Setup = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [shopData, setShopData] = useState({ name: "", city: "" });
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const steps = [
     { number: 1, title: "Store Details", icon: Store },
@@ -22,15 +26,43 @@ const Setup = () => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file) {
-      setUploadedFile(file.name);
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+      setUploadedFile(file);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Invalid file type",
+        description: "Please upload an Excel file (.xlsx or .xls)",
+      });
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setUploadedFile(file.name);
+      setUploadedFile(file);
+    }
+  };
+
+  const handleUploadToBackend = async () => {
+    if (!uploadedFile) return;
+
+    setIsUploading(true);
+    try {
+      const result = await apiService.importProducts(uploadedFile);
+      toast({
+        title: "Success!",
+        description: `Imported ${result.inserted_count} products successfully`,
+      });
+      setCurrentStep(3);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: error.message || "Could not upload file",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -81,8 +113,16 @@ const Setup = () => {
                   <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto">
                     <FileSpreadsheet className="w-6 h-6 text-success" />
                   </div>
-                  <p className="font-medium text-foreground">{uploadedFile}</p>
-                  <p className="text-sm text-muted-foreground">File uploaded successfully</p>
+                  <p className="font-medium text-foreground">{uploadedFile.name}</p>
+                  <p className="text-sm text-muted-foreground">File ready to upload</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUploadedFile(null)}
+                  >
+                    Remove
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -207,8 +247,28 @@ const Setup = () => {
                 <div />
               )}
               {currentStep < 3 ? (
-                <Button variant="hero" onClick={() => setCurrentStep(currentStep + 1)}>
-                  Continue <ArrowRight className="w-4 h-4 ml-2" />
+                <Button 
+                  variant="hero" 
+                  onClick={() => {
+                    if (currentStep === 2 && uploadedFile) {
+                      handleUploadToBackend();
+                    } else {
+                      setCurrentStep(currentStep + 1);
+                    }
+                  }}
+                  disabled={isUploading || (currentStep === 2 && !uploadedFile)}
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      {currentStep === 2 ? 'Upload & Continue' : 'Continue'}
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </>
+                  )}
                 </Button>
               ) : (
                 <Button variant="hero" onClick={() => navigate("/index")}>

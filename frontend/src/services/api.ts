@@ -121,6 +121,36 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  async importProducts(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const url = `${this.baseUrl}/api/products/import`;
+    const token = this.getToken();
+    
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.clearToken();
+        window.location.href = '/login';
+      }
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || 'Upload failed');
+    }
+
+    return await response.json();
+  }
 }
 
 export const apiService = new ApiService();

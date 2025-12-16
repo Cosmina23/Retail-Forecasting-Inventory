@@ -2,22 +2,47 @@
 Data Importer Service
 
 Handles importing data from various sources (Excel, CSV, images with barcodes, etc.)
-into MongoDB collections.
+Parses files and returns data as dictionaries for the DAL layer to insert.
 
 Usage:
-    importer = DataImporter()
-    products = importer.import_from_excel("data.xlsx", sheet_name="products")
-    importer.save_to_mongodb(products, collection="products")
+    from services.data_importer import import_products_from_excel
+    docs = import_products_from_excel("data.xlsx", sheet_name="products")
 """
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from pymongo import MongoClient
-import os
-from dotenv import load_dotenv
 import json
 from openpyxl import load_workbook
 import pandas as pd
+
+
+def import_products_from_excel(file_path: str, sheet_name: str = "products") -> List[Dict[str, Any]]:
+    """
+    Parse products from an Excel file.
+    
+    Args:
+        file_path: Path to the Excel file
+        sheet_name: Name of the sheet to read (default: "products")
+        
+    Returns:
+        List of product documents ready for database insertion
+    """
+    handler = ExcelHandler()
+    return handler.read(file_path, sheet_name)
+
+
+def import_products_from_csv(file_path: str) -> List[Dict[str, Any]]:
+    """
+    Parse products from a CSV file.
+    
+    Args:
+        file_path: Path to the CSV file
+        
+    Returns:
+        List of product documents ready for database insertion
+    """
+    handler = CSVHandler()
+    return handler.read(file_path)
 
 
 class DataImporter:

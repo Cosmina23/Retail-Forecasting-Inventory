@@ -15,7 +15,7 @@ from pathlib import Path
 from openpyxl import Workbook
 import csv
 
-from app.services.data_importer import DataImporter, ExcelHandler, CSVHandler
+from backend.services.data_importer import DataImporter, ExcelHandler, CSVHandler
 
 
 class TestExcelHandler(unittest.TestCase):
