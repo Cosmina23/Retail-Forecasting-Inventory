@@ -1,0 +1,127 @@
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+class ApiService {
+  private baseUrl: string;
+  private token: string | null = null;
+
+  constructor() {
+    this.baseUrl = API_BASE_URL;
+    this.token = localStorage.getItem('access_token');
+  }
+
+  setToken(token: string) {
+    this.token = token;
+    localStorage.setItem('access_token', token);
+  }
+
+  clearToken() {
+    this.token = null;
+    localStorage.removeItem('access_token');
+  }
+
+  getToken() {
+    return this.token || localStorage.getItem('access_token');
+  }
+
+  private async request(endpoint: string, options: RequestInit = {}) {
+    const url = `${this.baseUrl}${endpoint}`;
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    const token = this.getToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          this.clearToken();
+          window.location.href = '/login';
+        }
+        const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+        throw new Error(error.detail || 'Request failed');
+      }
+
+      // Handle 204 No Content
+      if (response.status === 204) {
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('API request failed:', error);
+      throw error;
+    }
+  }
+
+  // Auth endpoints
+  async login(email: string, password: string) {
+    const response = await this.request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    if (response.access_token) {
+      this.setToken(response.access_token);
+    }
+    return response;
+  }
+
+  async register(email: string, password: string, full_name?: string) {
+    const response = await this.request('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, full_name }),
+    });
+    if (response.access_token) {
+      this.setToken(response.access_token);
+    }
+    return response;
+  }
+
+  async getCurrentUser() {
+    return this.request('/api/auth/me');
+  }
+
+  async logout() {
+    this.clearToken();
+  }
+
+  // Products endpoints
+  async getProducts() {
+    return this.request('/api/products/');
+  }
+
+  async getProduct(productId: string) {
+    return this.request(`/api/products/${productId}`);
+  }
+
+  async createProduct(product: any) {
+    return this.request('/api/products/', {
+      method: 'POST',
+      body: JSON.stringify(product),
+    });
+  }
+
+  async updateProduct(productId: string, product: any) {
+    return this.request(`/api/products/${productId}`, {
+      method: 'PUT',
+      body: JSON.stringify(product),
+    });
+  }
+
+  async deleteProduct(productId: string) {
+    return this.request(`/api/products/${productId}`, {
+      method: 'DELETE',
+    });
+  }
+}
+
+export const apiService = new ApiService();
+export default apiService;

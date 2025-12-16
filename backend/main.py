@@ -1,54 +1,38 @@
-"""
-FastAPI application for Retail Forecasting & Inventory Optimizer.
-
-Main entry point. Start with:
-  uvicorn main:app --reload --port 8000
-
-Or with explicit host:
-  uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-"""
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import MongoClient
-import os
 from dotenv import load_dotenv
+import os
 
-from app.routes import products, sales
-from app.models.schemas import HealthCheck
-
+# Load environment variables
 load_dotenv()
 
+# Create FastAPI app
 app = FastAPI(
-    title="Retail Forecasting & Inventory Optimizer API",
-    description="API for demand forecasting, inventory optimization, and sales analysis",
-    version="0.1.0",
+    title="Retail Forecasting & Inventory API",
+    description="Backend API for retail forecasting and inventory management",
+    version="1.0.0"
 )
 
-# Enable CORS for frontend access
+# Configure CORS - Allow all origins for development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=["*"],  # Allow all origins in development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
-# Include routers
-app.include_router(products.router)
-app.include_router(sales.router)
-
-
-@app.get("/", tags=["root"])
-def read_root():
-    """Root endpoint."""
+# Root endpoint
+@app.get("/")
+async def root():
     return {
-        "message": "Retail Forecasting & Inventory Optimizer API",
-        "docs": "/docs",
-        "openapi": "/openapi.json",
+        "message": "Retail Forecasting & Inventory API",
+        "version": "1.0.0",
+        "status": "running"
     }
 
-
+# Health check endpoint
 @app.get("/health", response_model=HealthCheck, tags=["health"])
 def health_check():
     """Health check endpoint. Verifies API and MongoDB connection."""
@@ -63,13 +47,15 @@ def health_check():
 
     return HealthCheck(status="ok", database=db_status)
 
+# Import routers
+from routers import auth, products
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(products.router, prefix="/api/products", tags=["Products"])
+# app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
+# app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-    )
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("main:app", host=host, port=port, reload=True)
