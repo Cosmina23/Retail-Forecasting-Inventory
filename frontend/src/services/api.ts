@@ -133,6 +133,15 @@ class ApiService {
       body: JSON.stringify({ store_id: storeId, days }),
     });
   }
+
+  // Inventory optimization endpoints
+  async getInventoryOptimization(storeId: string, leadTimeDays: number = 7, serviceLevel: number = 0.95) {
+    return this.request(`/api/inventory/optimize/${storeId}?lead_time_days=${leadTimeDays}&service_level=${serviceLevel}`);
+  }
+
+  async getInventoryStores() {
+    return this.request('/api/inventory/stores');
+  }
 }
 
 export const apiService = new ApiService();
