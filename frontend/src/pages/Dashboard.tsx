@@ -2,6 +2,7 @@ import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Package, ShoppingCart, Euro, AlertTriangle } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
+import { Chatbot} from '@/components/Chatbot';
 
 const salesData = [
   { date: "Dec 01", forecast: 4200, actual: 4100 },
@@ -170,6 +171,7 @@ const Dashboard = () => {
           </Card>
         </div>
       </div>
+      <Chatbot storeId="store_123" />
     </DashboardLayout>
   );
 };
