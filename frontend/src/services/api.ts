@@ -142,6 +142,30 @@ class ApiService {
   async getInventoryStores() {
     return this.request('/api/inventory/stores');
   }
+
+  // Purchase Orders endpoints
+  async getSuppliers() {
+    return this.request('/api/purchase-orders/suppliers');
+  }
+
+  async generatePurchaseOrder(orderData: any) {
+    return this.request('/api/purchase-orders/generate', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async generatePurchaseOrderFromRecommendations(storeId: string, supplier: string, notes?: string) {
+    const params = new URLSearchParams({
+      store_id: storeId,
+      supplier: supplier,
+    });
+    if (notes) params.append('notes', notes);
+    
+    return this.request(`/api/purchase-orders/generate-from-recommendations?${params}`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiService = new ApiService();
