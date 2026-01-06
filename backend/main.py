@@ -38,11 +38,11 @@ async def health_check():
     return {"status": "healthy"}
 
 # Import routers
-from routers import auth, products
+from routers import auth, products, forecasting
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
+app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 # app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
-# app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 
 if __name__ == "__main__":
     import uvicorn

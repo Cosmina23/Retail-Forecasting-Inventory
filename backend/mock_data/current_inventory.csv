@@ -1,0 +1,10 @@
+store_id,product,category,stock_quantity,reorder_level,last_restock_date
+1,Laptop,Electronics,50,30,2025-12-20
+1,Smartphone,Electronics,75,40,2025-12-20
+1,Headphones,Electronics,120,60,2025-12-20
+1,T-Shirt,Clothing,200,100,2025-12-18
+1,Jeans,Clothing,100,50,2025-12-18
+1,Jacket,Clothing,80,40,2025-12-18
+1,Bread,Food,150,80,2026-01-05
+1,Milk,Food,180,100,2026-01-05
+1,Eggs,Food,140,70,2026-01-05

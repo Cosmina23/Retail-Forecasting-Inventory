@@ -121,6 +121,18 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  // Forecasting endpoints
+  async getAvailableStores() {
+    return this.request('/api/forecasting/stores');
+  }
+
+  async getForecast(storeId: string, days: number = 7) {
+    return this.request('/api/forecasting/predict', {
+      method: 'POST',
+      body: JSON.stringify({ store_id: storeId, days }),
+    });
+  }
 }
 
 export const apiService = new ApiService();
