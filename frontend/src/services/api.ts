@@ -121,6 +121,51 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  // Forecasting endpoints
+  async getAvailableStores() {
+    return this.request('/api/forecasting/stores');
+  }
+
+  async getForecast(storeId: string, days: number = 7) {
+    return this.request('/api/forecasting/predict', {
+      method: 'POST',
+      body: JSON.stringify({ store_id: storeId, days }),
+    });
+  }
+
+  // Inventory optimization endpoints
+  async getInventoryOptimization(storeId: string, leadTimeDays: number = 7, serviceLevel: number = 0.95) {
+    return this.request(`/api/inventory/optimize/${storeId}?lead_time_days=${leadTimeDays}&service_level=${serviceLevel}`);
+  }
+
+  async getInventoryStores() {
+    return this.request('/api/inventory/stores');
+  }
+
+  // Purchase Orders endpoints
+  async getSuppliers() {
+    return this.request('/api/purchase-orders/suppliers');
+  }
+
+  async generatePurchaseOrder(orderData: any) {
+    return this.request('/api/purchase-orders/generate', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async generatePurchaseOrderFromRecommendations(storeId: string, supplier: string, notes?: string) {
+    const params = new URLSearchParams({
+      store_id: storeId,
+      supplier: supplier,
+    });
+    if (notes) params.append('notes', notes);
+    
+    return this.request(`/api/purchase-orders/generate-from-recommendations?${params}`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiService = new ApiService();
