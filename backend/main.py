@@ -40,6 +40,7 @@ async def health_check():
 # Import routers
 from routers import auth, products, stores, inventory, sales, forecasts, activity
 from services.chat import router as chat_router
+from routers import auth, products, forecasting, inventory, purchase_orders
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(chat_router, prefix="/api")
@@ -51,6 +52,9 @@ app.include_router(activity.router, prefix="/api")
 
 # app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
 # app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
+app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
+app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
+app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=["Purchase Orders"])
 
 if __name__ == "__main__":
     import uvicorn
