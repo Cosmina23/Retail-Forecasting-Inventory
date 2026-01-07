@@ -3,31 +3,41 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Package, ShoppingCart, Euro, AlertTriangle } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { Chatbot} from '@/components/Chatbot';
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 
-const salesData = [
-  { date: "Dec 01", forecast: 4200, actual: 4100 },
-  { date: "Dec 02", forecast: 4500, actual: 4300 },
-  { date: "Dec 03", forecast: 4800, actual: 5100 },
-  { date: "Dec 04", forecast: 5200, actual: 4900 },
-  { date: "Dec 05", forecast: 5500, actual: null },
-  { date: "Dec 06", forecast: 5800, actual: null },
-  { date: "Dec 07", forecast: 6100, actual: null },
-];
+interface SalePoint {
+  date: string;
+  forecast?: number | null;
+  actual?: number | null;
+}
 
-const inventoryData = [
-  { name: "Electronics", value: 35, color: "hsl(var(--chart-1))" },
-  { name: "Clothing", value: 40, color: "hsl(var(--chart-2))" },
-  { name: "Home", value: 25, color: "hsl(var(--chart-3))" },
-];
+interface InventoryEntry {
+  name?: string;
+  product_id?: string;
+  value?: number;
+  quantity?: number;
+  reorder_level?: number;
+  color?: string;
+}
 
-const stats = [
-  { label: "Daily Revenue", value: "€12,450.80", change: "+12%", positive: true, icon: Euro },
-  { label: "Orders", value: "143", change: "+8%", positive: true, icon: ShoppingCart },
-  { label: "Stock Level", value: "2,847", change: "-3%", positive: false, icon: Package },
-  { label: "Critical Items", value: "12", change: "+4", positive: false, icon: AlertTriangle },
-];
+interface StatItem {
+  label: string;
+  value: string;
+  change?: string;
+  positive?: boolean;
+  icon: any;
+}
 
 const Dashboard = () => {
+  const params = useParams();
+  const routeStoreId = params.storeId || null;
+  const [salesData, setSalesData] = useState<SalePoint[]>([]);
+  const [inventoryData, setInventoryData] = useState<InventoryEntry[]>([]);
+  const [stats, setStats] = useState<StatItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -35,6 +45,176 @@ const Dashboard = () => {
       minimumFractionDigits: 0,
     }).format(value);
   };
+
+  useEffect(() => {
+    const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
+    const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
+
+    if (!storeId) {
+      setLoading(false);
+      setError("No store selected. Please select a store from the shop selector.");
+      return;
+    }
+
+    fetchDataForStore(storeId);
+  }, [routeStoreId]);
+
+  const fetchDataForStore = async (storeId: string) => {
+    setLoading(true);
+    setError(null);
+
+    console.log('🔍 Fetching data for store:', storeId);
+
+    try {
+      const base = "http://localhost:8000/api";
+
+      // Verificăm mai întâi că store-ul există
+      try {
+        console.log('📡 Checking if store exists...');
+        const storeRes = await fetch(`${base}/stores/${storeId}`);
+        if (!storeRes.ok) {
+          if (storeRes.status === 404) {
+            console.error('❌ Store not found');
+            setError(`Store with ID "${storeId}" not found. Please select a valid store.`);
+            setLoading(false);
+            return;
+          }
+          throw new Error(`Failed to fetch store: ${storeRes.statusText}`);
+        }
+        const storeData = await storeRes.json();
+        console.log('✅ Store found:', storeData);
+      } catch (e) {
+        console.error("❌ Store validation failed", e);
+        setError(`Unable to access store "${storeId}". The store may not exist or the server is unavailable.`);
+        setLoading(false);
+        return;
+      }
+
+      let sales: SalePoint[] = [];
+      try {
+        console.log('📡 Fetching sales...');
+        const res = await fetch(`${base}/sales?store_id=${storeId}`);
+        if (res.ok) {
+          sales = await res.json();
+          console.log('✅ Sales loaded:', sales.length, 'items');
+        }
+      } catch (e) {
+        console.debug("⚠️ sales endpoint not available", e);
+      }
+
+      let inventory: InventoryEntry[] = [];
+      try {
+        console.log('📡 Fetching inventory...');
+        const res = await fetch(`${base}/inventory?store_id=${storeId}`);
+        if (res.ok) {
+          inventory = await res.json();
+          console.log('✅ Inventory loaded:', inventory.length, 'items');
+        }
+      } catch (e) {
+        console.debug("⚠️ inventory endpoint not available", e);
+      }
+
+      let metrics: any = null;
+      try {
+        console.log('📡 Fetching metrics...');
+        const res = await fetch(`${base}/stores/${storeId}/metrics`);
+        if (res.ok) {
+          metrics = await res.json();
+          console.log('✅ Metrics loaded:', metrics);
+        }
+      } catch (e) {
+        console.debug("⚠️ metrics endpoint optional", e);
+      }
+
+      console.log('📊 Setting up dashboard data...');
+      setSalesData(sales.length ? sales : fallbackSales());
+      setInventoryData(inventory.length ? inventory : fallbackInventory());
+
+      const computedStats: StatItem[] = [];
+
+      if (metrics) {
+        computedStats.push({
+          label: "Daily Revenue",
+          value: formatCurrency(metrics.daily_revenue ?? 0),
+          change: metrics.revenue_change ? `${metrics.revenue_change}` : "",
+          positive: (metrics.revenue_change || 0) >= 0,
+          icon: Euro,
+        });
+
+        computedStats.push({
+          label: "Orders",
+          value: String(metrics.orders ?? 0),
+          change: metrics.orders_change ? `${metrics.orders_change}` : "",
+          positive: (metrics.orders_change || 0) >= 0,
+          icon: ShoppingCart,
+        });
+
+        computedStats.push({
+          label: "Stock Level",
+          value: String(metrics.stock_level ?? 0),
+          change: metrics.stock_change ? `${metrics.stock_change}` : "",
+          positive: (metrics.stock_change || 0) >= 0,
+          icon: Package,
+        });
+
+        computedStats.push({
+          label: "Critical Items",
+          value: String(metrics.critical_items ?? 0),
+          change: metrics.critical_items_change ? `${metrics.critical_items_change}` : "",
+          positive: (metrics.critical_items_change || 0) <= 0,
+          icon: AlertTriangle,
+        });
+      } else {
+        const orders = sales.length;
+        const stockLevel = inventory.reduce((acc, i) => acc + (i.quantity || 0), 0);
+        const critical = inventory.reduce((acc, i) => acc + ((i.quantity ?? 0) <= (i.reorder_level ?? 0) ? 1 : 0), 0);
+        const revenue = sales.reduce((acc, s) => acc + (typeof s.actual === 'number' ? s.actual : 0), 0);
+
+        computedStats.push({ label: "Daily Revenue", value: formatCurrency(revenue), change: "", positive: true, icon: Euro });
+        computedStats.push({ label: "Orders", value: String(orders), change: "", positive: true, icon: ShoppingCart });
+        computedStats.push({ label: "Stock Level", value: String(stockLevel), change: "", positive: true, icon: Package });
+        computedStats.push({ label: "Critical Items", value: String(critical), change: "", positive: critical === 0, icon: AlertTriangle });
+      }
+
+      setStats(computedStats);
+    } catch (e) {
+      console.error("Failed to fetch dashboard data", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fallbackSales = (): SalePoint[] => {
+    return [
+      { date: "Day 1", forecast: 0, actual: 0 },
+      { date: "Day 2", forecast: 0, actual: 0 },
+      { date: "Day 3", forecast: 0, actual: 0 },
+    ];
+  };
+
+  const fallbackInventory = (): InventoryEntry[] => {
+    return [
+      { name: "No data", value: 100, color: "hsl(var(--chart-3))" },
+    ];
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">Loading dashboard...</div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-center text-red-500">{error}</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -171,7 +351,7 @@ const Dashboard = () => {
           </Card>
         </div>
       </div>
-      <Chatbot storeId="store_123" />
+      <Chatbot storeId={routeStoreId || ""} />
     </DashboardLayout>
   );
 };

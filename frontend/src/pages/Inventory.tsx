@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,22 +21,15 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Package } from "lucide-react";
-
-const initialProducts = [
-  { sku: "EL-001", name: "Samsung Galaxy S23", stock: 45, safetyStock: 20, status: "in-stock" },
-  { sku: "EL-002", name: "Apple iPhone 15 Pro", stock: 12, safetyStock: 15, status: "low-stock" },
-  { sku: "CL-001", name: "Nike Air Max 90", stock: 67, safetyStock: 30, status: "in-stock" },
-  { sku: "CL-002", name: "Levi's 501 Jeans", stock: 8, safetyStock: 25, status: "low-stock" },
-  { sku: "HO-001", name: "Philips Air Purifier", stock: 23, safetyStock: 10, status: "in-stock" },
-  { sku: "HO-002", name: "Dyson V15 Vacuum", stock: 5, safetyStock: 8, status: "low-stock" },
-  { sku: "EL-003", name: "Sony WH-1000XM5", stock: 34, safetyStock: 15, status: "in-stock" },
-  { sku: "CL-003", name: "Adidas Ultraboost", stock: 52, safetyStock: 20, status: "in-stock" },
-];
+import { useParams } from "react-router-dom";
 
 const Inventory = () => {
-  const [products, setProducts] = useState(initialProducts);
+  const params = useParams();
+  const routeStoreId = params.storeId || null;
+  const [products, setProducts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [newProduct, setNewProduct] = useState({
     sku: "",
     name: "",
@@ -44,24 +37,78 @@ const Inventory = () => {
     safetyStock: "",
   });
 
+  useEffect(() => {
+    const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
+    const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
+
+    if (!storeId) {
+      setLoading(false);
+      return;
+    }
+
+    fetchInventory(storeId);
+  }, [routeStoreId]);
+
+  const fetchInventory = async (storeId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/inventory?store_id=${storeId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch inventory", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredProducts = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+      p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.sku?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
+    const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
+    const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
+
+    if (!storeId) return;
+
     const product = {
       sku: newProduct.sku,
       name: newProduct.name,
       stock: parseInt(newProduct.stock),
       safetyStock: parseInt(newProduct.safetyStock),
+      store_id: storeId,
       status: parseInt(newProduct.stock) > parseInt(newProduct.safetyStock) ? "in-stock" : "low-stock",
     };
-    setProducts([...products, product]);
-    setNewProduct({ sku: "", name: "", stock: "", safetyStock: "" });
-    setIsDialogOpen(false);
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/inventory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(product),
+      });
+
+      if (res.ok) {
+        setProducts([...products, product]);
+        setNewProduct({ sku: "", name: "", stock: "", safetyStock: "" });
+        setIsDialogOpen(false);
+      }
+    } catch (e) {
+      console.error("Failed to add product", e);
+    }
   };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">Loading inventory...</div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

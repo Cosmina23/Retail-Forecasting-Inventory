@@ -38,11 +38,17 @@ async def health_check():
     return {"status": "healthy"}
 
 # Import routers
-from routers import auth, products
+from routers import auth, products, stores, inventory, sales, forecasts, activity
 from services.chat import router as chat_router
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(chat_router, prefix="/api")
+app.include_router(stores.router, prefix="/api")
+app.include_router(inventory.router, prefix="/api")
+app.include_router(sales.router, prefix="/api")
+app.include_router(forecasts.router, prefix="/api")
+app.include_router(activity.router, prefix="/api")
+
 # app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
 # app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 
