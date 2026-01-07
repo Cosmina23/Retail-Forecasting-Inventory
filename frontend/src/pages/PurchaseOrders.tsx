@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +58,8 @@ interface PurchaseOrder {
 }
 
 const PurchaseOrders = () => {
+  const params = useParams();
+  const routeStoreId = params.storeId || null;
   const [stores, setStores] = useState<Store[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
@@ -79,6 +82,22 @@ const PurchaseOrders = () => {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    // Set store from URL parameter or localStorage
+    const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
+    const storeId = routeStoreId || (sel ? (() => {
+      try {
+        return JSON.parse(sel)._id || JSON.parse(sel).id
+      } catch {
+        return null
+      }
+    })() : null);
+
+    if (storeId && stores.length > 0) {
+      setSelectedStore(storeId);
+    }
+  }, [routeStoreId, stores]);
 
   const loadInitialData = async () => {
     try {

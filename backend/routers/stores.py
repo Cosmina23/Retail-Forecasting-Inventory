@@ -40,6 +40,12 @@ async def get_user_stores(current_user: Optional[dict] = Depends(get_current_use
     return stores
 
 
+@router.get("")
+async def get_user_stores_no_slash(current_user: Optional[dict] = Depends(get_current_user)):
+    """Alias for GET / without trailing slash"""
+    return await get_user_stores(current_user)
+
+
 @router.post("/")
 async def create_store(store: Store, current_user: Optional[dict] = Depends(get_current_user)):
     store_data = store.dict()
@@ -63,6 +69,12 @@ async def create_store(store: Store, current_user: Optional[dict] = Depends(get_
         created_store["user_id"] = str(created_store["user_id"])
 
     return created_store
+
+
+@router.post("")
+async def create_store_no_slash(store: Store, current_user: Optional[dict] = Depends(get_current_user)):
+    """Alias for POST / without trailing slash"""
+    return await create_store(store, current_user)
 
 
 @router.get("/{store_id}/metrics")

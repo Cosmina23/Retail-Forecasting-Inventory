@@ -33,6 +33,7 @@ const App = () => (
           <Route path="/inventory/:storeId" element={<Inventory />} />
           <Route path="/forecasting/:storeId" element={<Forecasting />} />
           <Route path="/history/:storeId" element={<History />} />
+          <Route path="/purchase-orders/:storeId" element={<PurchaseOrders />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

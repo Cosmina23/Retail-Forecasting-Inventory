@@ -5,9 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Package } from "lucide-react";
+import { Plus, Search, Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart } from "lucide-react";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
@@ -50,7 +49,6 @@ const Inventory = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [newProduct, setNewProduct] = useState({
     sku: "",
     name: "",
@@ -178,6 +176,8 @@ const Inventory = () => {
       currency: "EUR",
       minimumFractionDigits: 0,
     }).format(value);
+  };
+
   const handleAddProduct = async () => {
     const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
     const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
