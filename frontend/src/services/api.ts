@@ -118,13 +118,13 @@ class ApiService {
   async getInventory(storeId: string, skip = 0, limit = 200) {
     if (!storeId) throw new Error('storeId required');
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
-    return this.request(`/api/data/inventory/store/${storeId}?${params.toString()}`);
+    return this.request(`/api/inventory/store/${storeId}?${params.toString()}`);
   }
 
   async getLowStock(storeId: string, skip = 0, limit = 200) {
     if (!storeId) throw new Error('storeId required');
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
-    return this.request(`/api/data/inventory/low-stock/${storeId}?${params.toString()}`);
+    return this.request(`/api/inventory/low-stock/${storeId}?${params.toString()}`);
   }
 
   async createProduct(product: any) {
@@ -164,7 +164,11 @@ class ApiService {
   }
 
   async getInventoryStores() {
-    return this.request('/api/inventory/stores');
+    // Use stores endpoint (real stores managed by the user)
+    const res = await this.request('/api/stores/me');
+    // Backend returns an array of stores; normalize to { stores: [...] }
+    if (Array.isArray(res)) return { stores: res };
+    return { stores: res?.stores ?? [] };
   }
 
   // Purchase Orders endpoints

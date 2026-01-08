@@ -3,10 +3,13 @@ Inventory Repository - Data Access Layer
 Handles database operations for inventory collection.
 """
 
+import numpy as np
+import pandas as pd
 from database import inventory_collection
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 from datetime import datetime
+from models import InventoryItem, InventoryOptimizationResponse
 
 
 def _sanitize_inventory_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -237,3 +240,106 @@ def delete_inventory(inventory_id: str) -> bool:
         return False
     result = inventory_collection.delete_one({"_id": ObjectId(inventory_id)})
     return result.deleted_count > 0
+
+#de la Mihnea, mutat din inventory.py
+def calculate_safety_stock(avg_demand: float, demand_std: float, lead_time_days: int = 7, service_level: float = 0.95) -> int:
+    """
+    Calculate safety stock using statistical method
+    
+    Formula: Safety Stock = Z × σ × √L
+    Where:
+    - Z = Z-score for service level (0.95 = 1.65, 0.99 = 2.33)
+    - σ = standard deviation of demand
+    - L = lead time in days
+    """
+    # Z-scores for common service levels
+    z_scores = {
+        0.90: 1.28,
+        0.95: 1.65,
+        0.99: 2.33,
+        0.999: 3.09
+    }
+    
+    z_score = z_scores.get(service_level, 1.65)
+    
+    # Safety stock formula
+    safety_stock = z_score * demand_std * np.sqrt(lead_time_days)
+    
+    return int(np.ceil(safety_stock))
+
+def calculate_reorder_point(avg_demand: float, lead_time_days: int, safety_stock: int) -> int:
+    """
+    Calculate reorder point
+    
+    Formula: ROP = (Average Daily Demand × Lead Time) + Safety Stock
+    """
+    reorder_point = (avg_demand * lead_time_days) + safety_stock
+    
+    return int(np.ceil(reorder_point))
+
+def calculate_eoq(annual_demand: float, ordering_cost: float = 50, holding_cost_rate: float = 0.25, unit_cost: float = 10) -> int:
+    """
+    Calculate Economic Order Quantity (EOQ)
+    
+    Formula: EOQ = √((2 × D × S) / H)
+    Where:
+    - D = annual demand
+    - S = ordering cost per order
+    - H = holding cost per unit per year
+    """
+    if annual_demand <= 0:
+        return 0
+    
+    holding_cost = unit_cost * holding_cost_rate
+    
+    eoq = np.sqrt((2 * annual_demand * ordering_cost) / holding_cost)
+    
+    return int(np.ceil(eoq))
+
+def perform_abc_analysis(products_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Perform ABC analysis based on annual revenue
+    
+    Classification:
+    - A items: Top 20% of products contributing to 80% of revenue
+    - B items: Next 30% of products contributing to 15% of revenue  
+    - C items: Remaining 50% of products contributing to 5% of revenue
+    """
+    # Calculate annual revenue for each product
+    products_df = products_df.sort_values('annual_revenue', ascending=False).copy()
+    
+    # Calculate cumulative percentage
+    total_revenue = products_df['annual_revenue'].sum()
+    products_df['revenue_cumsum'] = products_df['annual_revenue'].cumsum()
+    if total_revenue == 0 or pd.isna(total_revenue):
+        # Avoid division by zero: mark all as 'C' when no revenue information
+        products_df['revenue_cumsum_pct'] = 0
+        products_df['abc_classification'] = 'C'
+        return products_df
+    products_df['revenue_cumsum_pct'] = (products_df['revenue_cumsum'] / total_revenue) * 100
+    
+    # Classify based on cumulative percentage
+    def classify(row):
+        if row['revenue_cumsum_pct'] <= 80:
+            return 'A'
+        elif row['revenue_cumsum_pct'] <= 95:
+            return 'B'
+        else:
+            return 'C'
+    
+    products_df['abc_classification'] = products_df.apply(classify, axis=1)
+    
+    return products_df
+
+def get_stock_status(current_stock: int, reorder_point: int, safety_stock: int) -> str:
+    """
+    Determine stock status based on current inventory levels
+    """
+    if current_stock <= safety_stock:
+        return "Critical"
+    elif current_stock <= reorder_point:
+        return "Low - Order Now"
+    elif current_stock <= reorder_point * 1.5:
+        return "Moderate"
+    else:
+        return "Healthy"

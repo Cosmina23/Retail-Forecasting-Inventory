@@ -6,6 +6,7 @@ import tempfile
 import os
 
 from models import Product
+from database import products_collection
 from utils.auth import get_current_user
 from dal.products_repo import (
     list_products,
@@ -76,10 +77,12 @@ def _normalize_import_doc(doc: dict) -> dict:
     return result
 
 
-@router.get("/", response_model=List[dict])
+@router.get("/", response_model=dict)
 async def get_products(skip: int = 0, limit: int = 100, current_user: str = Depends(get_current_user)):
-    """Get all products with pagination."""
-    return list_products(skip=skip, limit=limit)
+    """Get all products with pagination. Returns { products: [...], total: n }"""
+    items = list_products(skip=skip, limit=limit)
+    total = int(products_collection.count_documents({}))
+    return {"products": items, "total": total}
 
 
 @router.get("/{product_id}", response_model=dict)

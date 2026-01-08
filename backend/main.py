@@ -50,7 +50,7 @@ def health_check():
     return HealthCheck(status="ok", database=db_status)
 
 # Import routers
-from routers import auth, products
+from routers import auth, products,stores,sales,forecasting,inventory,purchase_orders
 from services.chat import router as chat_router
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])

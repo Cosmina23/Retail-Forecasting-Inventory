@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import Optional, List, Literal
+from typing import Dict, Optional, List, Literal
 
 from pydantic import BaseModel, EmailStr
 
 
-# Users
+# ---------------------- Users --------------------------------
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = None
@@ -24,7 +24,7 @@ class User(UserBase):
     id: str
     created_at: datetime
     is_active: bool = True
-    stores: List[str] = []  # Store IDs owned/managed by the user
+    stores: List[str] = []
 
 
 class Token(BaseModel):
@@ -36,7 +36,7 @@ class TokenData(BaseModel):
     email: Optional[str] = None
 
 
-# Stores
+# ---------------------- Stores --------------------------------
 class Store(BaseModel):
     id: Optional[str] = None
     name: str
@@ -53,16 +53,16 @@ class StoreCreate(BaseModel):
     address: Optional[str] = None
 
 
-# Products
+# ---------------------- Products ------------------------------
 class Product(BaseModel):
     id: Optional[str] = None
     name: str
-    sku: Optional[str] = None
+    sku: str
     category: Optional[str] = None
     price: float
     cost: Optional[float] = None
-    user_id: Optional[str] = None  # Owner
-    store_ids: List[str] = []  # Stores carrying this product
+    user_id: Optional[str] = None
+    store_ids: List[str] = []
     abc_classification: Optional[Literal["A", "B", "C"]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -70,31 +70,51 @@ class Product(BaseModel):
 
 class ProductCreate(BaseModel):
     name: str
-    sku: Optional[str] = None
+    sku: str
     category: Optional[str] = None
     price: float
     cost: Optional[float] = None
     store_ids: List[str] = []
 
 
-# Inventory
+# ---------------------- Inventory / Optimization ----------------
 class InventoryItem(BaseModel):
+    # Core inventory fields
     id: Optional[str] = None
-    product_id: str
-    store_id: str
-    quantity: int
-    reserved_quantity: int = 0
+    product_id: Optional[str] = None
+    product: Optional[str] = None
+    store_id: Optional[str] = None
+    quantity: Optional[int] = 0
+    reserved_quantity: Optional[int] = 0
     available_quantity: Optional[int] = None
-    reorder_point: int = 0
-    reorder_quantity: int = 0
-    safety_stock: int = 0
+    reorder_point: Optional[int] = 0
+    reorder_quantity: Optional[int] = 0
+    safety_stock: Optional[int] = 0
     holding_cost_per_unit: Optional[float] = None
     stockout_penalty: Optional[float] = None
-    last_updated: datetime
+    last_updated: Optional[datetime] = None
     last_counted: Optional[datetime] = None
 
+    # Optimization metric fields (optional)
+    category: Optional[str] = None
+    avg_daily_demand: Optional[float] = 0.0
+    demand_std: Optional[float] = 0.0
+    recommended_order_qty: Optional[int] = 0
+    abc_classification: Optional[str] = ""
+    annual_revenue: Optional[float] = 0.0
+    stock_days: Optional[float] = 0.0
+    status: Optional[str] = ""
 
-# Sales
+
+class InventoryOptimizationResponse(BaseModel):
+    store_id: str
+    total_products: int
+    metrics: List[InventoryItem]
+    abc_summary: Dict[str, int]
+    total_annual_revenue: float
+
+
+# ---------------------- Sales ---------------------------------
 class Sale(BaseModel):
     id: Optional[str] = None
     product_id: str
@@ -111,7 +131,7 @@ class Sale(BaseModel):
     created_at: Optional[datetime] = None
 
 
-# Forecasts
+# ---------------------- Forecasts -----------------------------
 class ForecastRequest(BaseModel):
     product_id: str
     days: int = 30
@@ -126,10 +146,10 @@ class ForecastResponse(BaseModel):
     generated_at: datetime
 
 
-# Purchase Orders (simplified)
+# ---------------------- Purchase Orders -----------------------
 class PurchaseOrderItem(BaseModel):
     product_id: str
-    sku: Optional[str] = None
+    sku: str
     product_name: str
     quantity_ordered: int
     unit_cost: float
@@ -154,7 +174,7 @@ class PurchaseOrder(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-# Promotions
+# ---------------------- Promotions ----------------------------
 class Promotion(BaseModel):
     id: Optional[str] = None
     name: str
@@ -169,7 +189,7 @@ class Promotion(BaseModel):
     created_at: Optional[datetime] = None
 
 
-# Holidays/Events
+# ---------------------- Holidays/Events -----------------------
 class Holiday(BaseModel):
     id: Optional[str] = None
     name: str
@@ -182,7 +202,7 @@ class Holiday(BaseModel):
     created_at: Optional[datetime] = None
 
 
-# Import runs/logs for auditability
+# ---------------------- Import runs/logs -----------------------
 class ImportRun(BaseModel):
     id: Optional[str] = None
     run_id: str

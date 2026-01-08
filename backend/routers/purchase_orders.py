@@ -88,7 +88,7 @@ class PurchaseOrderItem(BaseModel):
     description: Optional[str] = None
 
 class PurchaseOrderRequest(BaseModel):
-    store_id: int
+    store_id: str
     supplier: str
     items: List[PurchaseOrderItem]
     delivery_date: Optional[str] = None
@@ -300,7 +300,7 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
 
 @router.post("/generate-from-recommendations")
 async def generate_from_recommendations(
-    store_id: int,
+    store_id: str,
     supplier: str,
     notes: Optional[str] = None
 ):
@@ -318,9 +318,27 @@ async def generate_from_recommendations(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading data: {str(e)}")
     
-    # Filter by store
-    store_sales = sales_df[sales_df['Store'] == store_id]
-    store_inventory = inventory_df[inventory_df['Store'] == store_id]
+    # Determine likely column names (robust to different mock file formats)
+    def pick_column(df, candidates):
+        for c in candidates:
+            if c in df.columns:
+                return c
+        return None
+
+    store_col = pick_column(sales_df, ['store_id', 'Store', 'StoreId', 'StoreID'])
+    sales_product_col = pick_column(sales_df, ['product', 'Product', 'product_name'])
+    sales_qty_col = pick_column(sales_df, ['quantity', 'Quantity', 'qty'])
+
+    inv_store_col = pick_column(inventory_df, ['store_id', 'Store', 'StoreId', 'StoreID'])
+    inv_product_col = pick_column(inventory_df, ['product', 'Product', 'product_name'])
+    inv_stock_col = pick_column(inventory_df, ['stock_quantity', 'quantity', 'stock', 'CurrentStock'])
+
+    sid = str(store_id)
+    if not store_col or not inv_store_col:
+        raise HTTPException(status_code=500, detail="Unexpected mock CSV format: missing store column")
+
+    store_sales = sales_df[sales_df[store_col].astype(str) == sid]
+    store_inventory = inventory_df[inventory_df[inv_store_col].astype(str) == sid]
     
     if store_sales.empty or store_inventory.empty:
         raise HTTPException(status_code=404, detail=f"No data found for store {store_id}")
@@ -328,11 +346,14 @@ async def generate_from_recommendations(
     # Calculate what needs to be ordered
     items = []
     for _, inv_row in store_inventory.iterrows():
-        product = inv_row['Product']
-        current_stock = inv_row['CurrentStock']
+        product = inv_row.get(inv_product_col) if inv_product_col else None
+        current_stock = inv_row.get(inv_stock_col) if inv_stock_col else 0
         
         # Calculate average daily demand
-        product_sales = store_sales[store_sales['Product'] == product]
+        if sales_product_col:
+            product_sales = store_sales[store_sales[sales_product_col] == product]
+        else:
+            product_sales = pd.DataFrame()
         if not product_sales.empty:
             avg_daily_demand = product_sales['Quantity'].mean()
             
@@ -344,8 +365,11 @@ async def generate_from_recommendations(
                 order_qty = int(avg_daily_demand * 14)
                 
                 # Get product info
-                category = product_sales['Category'].iloc[0]
-                unit_price = product_sales['Price'].mean()
+                # Handle possible category/price column names
+                category_col = pick_column(product_sales, ['category', 'Category'])
+                price_col = pick_column(product_sales, ['price', 'Price', 'unit_price'])
+                category = product_sales[category_col].iloc[0] if category_col in product_sales.columns else 'Uncategorized'
+                unit_price = float(product_sales[price_col].mean()) if price_col in product_sales.columns else 1.0
                 
                 items.append(PurchaseOrderItem(
                     product_name=product,
