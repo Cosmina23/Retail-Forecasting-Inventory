@@ -50,25 +50,22 @@ def health_check():
     return HealthCheck(status="ok", database=db_status)
 
 # Import routers
-
-from routers import products, auth, stores, sales, inventory
+from routers import auth, products
 from services.chat import router as chat_router
-
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(products.router, prefix="/api/products", tags=["Products"])
+app.include_router(chat_router, prefix="/api")
+app.include_router(stores.router, prefix="/api/stores", tags=["Stores"])
+app.include_router(sales.router, prefix="/api/sales", tags=["Sales"])
+app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
+app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
+#varianta flavia-> app.include_router(inventory.router, prefix="/api/data/inventory", tags=["Inventory"])
+app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=["Purchase Orders"])
 
 @app.on_event("startup")
 def startup_event():
     """Create required indexes on startup."""
     create_indexes()
-
-
-# Add routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(products.router, prefix="/api/products", tags=["Products"])
-app.include_router(stores.router, prefix="/api/stores", tags=["Stores"])
-app.include_router(sales.router, prefix="/api/sales", tags=["Sales"])
-app.include_router(chat_router, prefix="/api")
-app.include_router(inventory.router, prefix="/api/data/inventory", tags=["Inventory"])
-# app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Package, TrendingUp, History, ChevronLeft, Settings, Bell } from "lucide-react";
+import { LayoutDashboard, Package, TrendingUp, History, ChevronLeft, Settings, Bell, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,7 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Package, label: "Inventory", path: "/inventory" },
   { icon: TrendingUp, label: "Forecasting", path: "/forecasting" },
+  { icon: FileText, label: "Purchase Orders", path: "/purchase-orders" },
   { icon: History, label: "History", path: "/history" },
   { icon: TrendingUp, label: "Sales", path: "/sales" },
 ];
