@@ -1,86 +1,34 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Store, Plus, TrendingUp, LogOut, Settings, Loader2, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { storesApi, Store as StoreType } from "@/services/api";
-import { NewStoreDialog } from "@/components/NewStoreDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Store, Plus, TrendingUp, LogOut, Settings } from "lucide-react";
+import { apiService } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
+
 
 const ShopSelector = () => {
   const navigate = useNavigate();
-  const [shops, setShops] = useState<StoreType[]>([]);
+  const { toast } = useToast();
+  const [shops, setShops] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isNewStoreDialogOpen, setIsNewStoreDialogOpen] = useState(false);
-  const [storeToDelete, setStoreToDelete] = useState<StoreType | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    fetchStores();
+    fetchShops();
   }, []);
 
-  const fetchStores = async () => {
-    const timeoutId = setTimeout(() => {
-      setError("Request timeout - backend is not responding. Is it running?");
-      setLoading(false);
-    }, 10000);
-
+  const fetchShops = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      console.log("Fetching stores from API...");
-      console.log("API Base URL:", import.meta.env.VITE_API_URL || 'http://localhost:8000');
-
-      const data = await storesApi.getAllStores();
-
-      clearTimeout(timeoutId);
-      console.log("Stores received:", data);
-      setShops(Array.isArray(data) ? data : []);
-      setError(null);
-    } catch (err) {
-      clearTimeout(timeoutId);
-      const errorMessage = err instanceof Error ? err.message : "Failed to load stores. Please try again.";
-      console.error("Error fetching stores:", err);
-      console.error("Full error object:", err);
-      setError(errorMessage);
+      const data = await apiService.getMyStores();
+      setShops(data);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to load stores",
+        description: error.message || "Could not fetch stores",
+      });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleStoreCreated = () => {
-    fetchStores();
-  };
-
-  const handleDeleteStore = async (store: StoreType) => {
-    setIsDeleting(true);
-    try {
-      const storeId = store._id || store.id;
-      if (!storeId) {
-        throw new Error("Store ID not found");
-      }
-
-      await storesApi.deleteStore(storeId);
-
-      // Reîncarcă lista de magazine
-      await fetchStores();
-
-      // Închide dialogul
-      setStoreToDelete(null);
-    } catch (err) {
-      console.error("Error deleting store:", err);
-      setError(err instanceof Error ? err.message : "Failed to delete store");
-    } finally {
-      setIsDeleting(false);
     }
   };
 
@@ -170,86 +118,41 @@ const ShopSelector = () => {
         )}
 
         {/* Shop Grid */}
-        {!loading && !error && (
-          <>
-            {shops.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-20 h-20 rounded-full bg-accent/50 flex items-center justify-center mb-4">
-                  <Store className="w-10 h-10 text-muted-foreground" />
-                </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">No Stores Yet</h3>
-                <p className="text-muted-foreground mb-6 max-w-md">
-                  Get started by creating your first store to manage inventory and track sales.
-                </p>
-                <Button variant="hero" onClick={() => setIsNewStoreDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" /> Create Your First Store
-                </Button>
-              </div>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {shops.map((shop, index) => (
-                  <div
-                    key={shop._id || shop.id}
-                    onClick={() => {
-                      const id = shop._id || shop.id;
-                      try {
-                        localStorage.setItem("selectedStore", JSON.stringify(shop));
-                      } catch (e) {
-                        console.warn("Could not save selectedStore", e);
-                      }
-                      if (id) navigate(`/dashboard/${id}`);
-                      else navigate("/index");
-                    }}
-                    className="bg-card border rounded-xl p-6 cursor-pointer card-hover shadow-card animate-fade-up"
-                    style={{ animationDelay: `${index * 0.05}s` }}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="w-12 h-12 rounded-lg bg-accent flex items-center justify-center">
-                        <Store className="w-6 h-6 text-primary" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full ${
-                            shop.status === "online" ? "bg-success" : "bg-destructive"
-                          }`}
-                        />
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {shop.status === "online" ? "Online" : "Offline"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <h3 className="font-semibold text-foreground mb-1">{shop.name}</h3>
-
-                    {shop.revenue && (
-                      <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-                        <TrendingUp className="w-4 h-4 text-success" />
-                        <span className="text-sm text-muted-foreground">Daily Revenue:</span>
-                        <span className="text-sm font-semibold text-foreground ml-auto">
-                          {formatCurrency(shop.revenue)}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Delete Store Button */}
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setStoreToDelete(shop);
-                        }}
-                      >
-                        <Trash2 className="w-5 h-5 text-destructive" />
-                      </Button>
-                    </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {loading ? (
+            <div>Loading stores...</div>
+          ) : shops.length === 0 ? (
+            <div>No stores found.</div>
+          ) : (
+            shops.map((shop: any, index: number) => (
+              <div
+                key={shop.id}
+                onClick={() => navigate("/dashboard")}
+                className="bg-card border rounded-xl p-6 cursor-pointer card-hover shadow-card animate-fade-up"
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 rounded-lg bg-accent flex items-center justify-center">
+                    <Store className="w-6 h-6 text-primary" />
                   </div>
-                ))}
+                  {/* Status logic can be improved if you have a field */}
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-success" />
+                    <span className="text-xs text-muted-foreground capitalize">Online</span>
+                  </div>
+                </div>
+                <h3 className="font-semibold text-foreground mb-1">{shop.name}</h3>
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+                  <TrendingUp className="w-4 h-4 text-success" />
+                  <span className="text-sm text-muted-foreground">Daily Revenue:</span>
+                  <span className="text-sm font-semibold text-foreground ml-auto">
+                    {formatCurrency(shop.revenue || 0)}
+                  </span>
+                </div>
               </div>
-            )}
-          </>
-        )}
+            ))
+          )}
+        </div>
       </main>
 
       <NewStoreDialog

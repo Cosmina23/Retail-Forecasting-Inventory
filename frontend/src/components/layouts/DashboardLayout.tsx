@@ -14,6 +14,7 @@ const navItems = [
   { icon: TrendingUp, label: "Forecasting", path: "/forecasting" },
   { icon: FileText, label: "Purchase Orders", path: "/purchase-orders" },
   { icon: History, label: "History", path: "/history" },
+  { icon: TrendingUp, label: "Sales", path: "/sales" },
 ];
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {

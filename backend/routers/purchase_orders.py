@@ -89,7 +89,7 @@ class PurchaseOrderItem(BaseModel):
     description: Optional[str] = None
 
 class PurchaseOrderRequest(BaseModel):
-    store_id: int
+    store_id: str
     supplier: str
     items: List[PurchaseOrderItem]
     delivery_date: Optional[str] = None
@@ -301,7 +301,7 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
 
 @router.post("/generate-from-recommendations")
 async def generate_from_recommendations(
-    store_id: int,
+    store_id: str,
     supplier: str,
     notes: Optional[str] = None
 ):

@@ -3,17 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet } from "lucide-react";
-import { storesApi } from "@/services/api";
+import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet, Loader2 } from "lucide-react";
+import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
+import { debug } from "console";
 
 const Setup = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
-  const [shopData, setShopData] = useState({ name: "", city: "" });
+  const [shopData, setShopData] = useState({ name: "", market: "" });
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const steps = [
     { number: 1, title: "Store Details", icon: Store },
@@ -25,15 +28,54 @@ const Setup = () => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file) {
-      setUploadedFile(file.name);
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+      setUploadedFile(file);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Invalid file type",
+        description: "Please upload an Excel file (.xlsx or .xls)",
+      });
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setUploadedFile(file.name);
+      setUploadedFile(file);
+    }
+  };
+
+  const handleUploadToBackend = async () => {
+    if (!uploadedFile || !storeId) {
+      toast({
+        variant: "destructive",
+        title: "Missing Store",
+        description: "Please create a store before importing products.",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Optionally, you can pass storeId to the backend if your import endpoint supports it
+      const store_id = localStorage.getItem('store_id');
+      const result = await apiService.importProducts(uploadedFile,store_id);
+      const imported = result.inserted_or_updated ?? result.inserted_count ?? 0;
+      const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
+      toast({
+        title: "Success!",
+        description: `Imported ${imported} products successfully${errorCount ? `, ${errorCount} rows had issues` : ""}`,
+      });
+      setCurrentStep(3);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: error.message || "Could not upload file",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -53,15 +95,40 @@ const Setup = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="city">City / Location</Label>
+              <Label htmlFor="market">Market / Region</Label>
               <Input
-                id="city"
+                id="market"
                 placeholder="e.g., Berlin"
-                value={shopData.city}
-                onChange={(e) => setShopData({ ...shopData, city: e.target.value })}
+                value={shopData.market}
+                onChange={(e) => setShopData({ ...shopData, market: e.target.value })}
                 className="h-11"
               />
             </div>
+            <Button
+              variant="hero"
+              className="mt-4"
+              disabled={!shopData.name || !shopData.market}
+              onClick={async () => {
+                try {
+                  const store = await apiService.createStore({
+                    name: shopData.name,
+                    market: shopData.market,
+                  });
+                  setStoreId(store.id);
+                  localStorage.setItem('store_id',store.id);
+                  toast({ title: "Store created!", description: `Store ${store.name} created successfully.` });
+                  setCurrentStep(2);
+                } catch (error: any) {
+                  toast({
+                    variant: "destructive",
+                    title: "Store creation failed",
+                    description: error.message || "Could not create store",
+                  });
+                }
+              }}
+            >
+              Create Store & Continue <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
           </div>
         );
       case 2:
@@ -84,8 +151,16 @@ const Setup = () => {
                   <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto">
                     <FileSpreadsheet className="w-6 h-6 text-success" />
                   </div>
-                  <p className="font-medium text-foreground">{uploadedFile}</p>
-                  <p className="text-sm text-muted-foreground">File uploaded successfully</p>
+                  <p className="font-medium text-foreground">{uploadedFile.name}</p>
+                  <p className="text-sm text-muted-foreground">File ready to upload</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUploadedFile(null)}
+                  >
+                    Remove
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -210,8 +285,28 @@ const Setup = () => {
                 <div />
               )}
               {currentStep < 3 ? (
-                <Button variant="hero" onClick={() => setCurrentStep(currentStep + 1)}>
-                  Continue <ArrowRight className="w-4 h-4 ml-2" />
+                <Button 
+                  variant="hero" 
+                  onClick={() => {
+                    if (currentStep === 2 && uploadedFile) {
+                      handleUploadToBackend();
+                    } else {
+                      setCurrentStep(currentStep + 1);
+                    }
+                  }}
+                  disabled={isUploading || (currentStep === 2 && !uploadedFile)}
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      {currentStep === 2 ? 'Upload & Continue' : 'Continue'}
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </>
+                  )}
                 </Button>
               ) : (
                 <Button variant="hero" onClick={() => navigate("/index")}>
