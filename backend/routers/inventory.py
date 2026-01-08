@@ -1,8 +1,11 @@
 from pathlib import Path
 from datetime import datetime, timedelta
+
+import numpy as np
+from pydantic import BaseModel
 from database import db, sales_collection, inventory_collection
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from typing import Dict, List
 
 import pandas as pd
 from dal.inventory_repo import (
@@ -286,8 +289,6 @@ async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_lev
             )
 
             unit_cost = unit_costs.get(category, 10)
-            "Food": 5,
-        }
 
         for item in inventory_items:
             prod_id = item.get("product_id")
@@ -368,9 +369,6 @@ async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_lev
                 "safety_stock": int(safety_stock),
                 "recommended_order_qty": int(eoq),
                 "annual_revenue": round(annual_revenue, 2),
-                "stock_days": round(stock_days, 1),
-                "abc_classification": "",
-                "status": ""
                 "stock_days": round(stock_days if isinstance(stock_days, (int, float)) else 0, 1),
                 "abc_classification": "",
                 "status": "",
