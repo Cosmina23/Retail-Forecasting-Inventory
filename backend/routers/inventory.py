@@ -297,3 +297,44 @@ async def get_stores_for_inventory():
         return {"stores": [{"id": int(s), "name": f"Store {s}"} for s in stores]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/store/{store_id}")
+async def get_store_inventory(store_id: str):
+    """
+    Get actual inventory items for a specific store
+    """
+    try:
+        from database import inventory_collection, products_collection
+        from bson import ObjectId
+        
+        # Get all inventory items for this store
+        inventory_items = list(inventory_collection.find({"shop_id": store_id}))
+        
+        # Enrich with product details
+        enriched_items = []
+        for item in inventory_items:
+            try:
+                product = products_collection.find_one({"_id": ObjectId(item["product_id"])})
+                if product:
+                    enriched_items.append({
+                        "id": str(item["_id"]),
+                        "product_id": str(product["_id"]),
+                        "product_name": product.get("name", "Unknown"),
+                        "sku": product.get("sku", "N/A"),
+                        "category": product.get("category", ""),
+                        "quantity": item.get("quantity", 0),
+                        "price": product.get("price", 0),
+                        "barcode": product.get("barcode", ""),
+                        "manufacturer": product.get("manufacturer", ""),
+                        "last_updated": item.get("last_updated").isoformat() if item.get("last_updated") else ""
+                    })
+            except Exception as e:
+                print(f"Error enriching inventory item: {e}")
+                continue
+        
+        return {"items": enriched_items}
+        
+    except Exception as e:
+        print(f"Error getting store inventory: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

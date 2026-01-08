@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart, Plus, Eye } from "lucide-react";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
@@ -43,11 +44,27 @@ interface Store {
   name: string;
 }
 
+interface InventoryItem {
+  id: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  category: string;
+  quantity: number;
+  price: number;
+  barcode?: string;
+  manufacturer?: string;
+  last_updated: string;
+}
+
 const Inventory = () => {
   const navigate = useNavigate();
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [leadTime, setLeadTime] = useState<number>(7);
+  const [showInventoryDialog, setShowInventoryDialog] = useState(false);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [loadingInventory, setLoadingInventory] = useState(false);
   const [serviceLevel, setServiceLevel] = useState<number>(0.95);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<OptimizationResponse | null>(null);
@@ -85,6 +102,26 @@ const Inventory = () => {
       toast.error(error.message || "Failed to optimize inventory");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewInventory = async () => {
+    if (!selectedStore) {
+      toast.error("Please select a store first");
+      return;
+    }
+
+    setLoadingInventory(true);
+    setShowInventoryDialog(true);
+    try {
+      const response = await apiService.getStoreInventory(selectedStore);
+      setInventoryItems(response.items || []);
+    } catch (error: any) {
+      console.error("Failed to load inventory:", error);
+      toast.error(error.message || "Failed to load inventory");
+      setInventoryItems([]);
+    } finally {
+      setLoadingInventory(false);
     }
   };
 
@@ -142,10 +179,16 @@ const Inventory = () => {
         {/* Header with Add Products Button */}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Inventory Management</h1>
-          <Button onClick={() => navigate('/product-import')} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add Products
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleViewInventory} variant="outline" className="gap-2" disabled={!selectedStore}>
+              <Eye className="w-4 h-4" />
+              View Inventory
+            </Button>
+            <Button onClick={() => navigate('/product-import')} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Add Products
+            </Button>
+          </div>
         </div>
 
         {/* Header & Controls */}
@@ -436,6 +479,76 @@ const Inventory = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Inventory Items Dialog */}
+        <Dialog open={showInventoryDialog} onOpenChange={setShowInventoryDialog}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Store Inventory</DialogTitle>
+              <DialogDescription>
+                {selectedStore && stores.find(s => s.id.toString() === selectedStore)?.name}
+              </DialogDescription>
+            </DialogHeader>
+            
+            {loadingInventory ? (
+              <div className="flex justify-center items-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : inventoryItems.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Package className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p>No items in inventory</p>
+                <p className="text-sm mt-2">Add products to this store to see them here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  Total items: <span className="font-semibold text-foreground">{inventoryItems.length}</span>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Barcode</TableHead>
+                      <TableHead className="text-right">Quantity</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
+                      <TableHead>Manufacturer</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {inventoryItems.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.product_name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{item.sku}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getCategoryColor(item.category || "")}>
+                            {item.category || "N/A"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {item.barcode || "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {item.quantity}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(item.price)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {item.manufacturer || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

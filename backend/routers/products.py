@@ -6,16 +6,18 @@ from database import products_collection, inventory_collection
 from utils.auth import get_current_user
 from bson import ObjectId
 from pydantic import BaseModel
+import traceback
 
+# Optional: Barcode scanning support
+BARCODE_SCANNING_AVAILABLE = False
 try:
     import cv2
     import numpy as np
     from pyzbar.pyzbar import decode
     BARCODE_SCANNING_AVAILABLE = True
+    print("✅ Barcode scanning available")
 except ImportError:
-    BARCODE_SCANNING_AVAILABLE = False
-    print("Warning: opencv-python or pyzbar not installed. Barcode scanning disabled.")
-    print("Install with: pip install opencv-python pyzbar")
+    print("⚠️  Barcode scanning disabled (opencv-python or pyzbar not installed)")
 
 router = APIRouter()
 
@@ -187,20 +189,39 @@ async def create_product_with_stores(
 ):
     """Create a product and add it to multiple stores' inventory"""
     try:
+        print(f"\n{'='*60}")
+        print(f"Creating product: {product_data.name}")
+        print(f"SKU: {product_data.sku}")
+        print(f"Selected stores: {product_data.selectedStores}")
+        print(f"{'='*60}")
+        
+        # Validate required fields
+        if not product_data.name or not product_data.sku:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Name and SKU are required"
+            )
+        
+        if not product_data.selectedStores or len(product_data.selectedStores) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one store must be selected"
+            )
+        
         # Create product
         product_dict = {
             "name": product_data.name,
             "sku": product_data.sku,
-            "barcode": product_data.barcode,
-            "category": product_data.category,
-            "price": product_data.price,
-            "current_stock": product_data.current_stock,
-            "manufacturer": product_data.manufacturer,
-            "origin_country": product_data.origin_country,
-            "description": product_data.description,
-            "ingredients": product_data.ingredients,
-            "allergens": product_data.allergens,
-            "image_url": product_data.image_url,
+            "barcode": product_data.barcode or "",
+            "category": product_data.category or "",
+            "price": float(product_data.price),
+            "current_stock": int(product_data.current_stock),
+            "manufacturer": product_data.manufacturer or "",
+            "origin_country": product_data.origin_country or "",
+            "description": product_data.description or "",
+            "ingredients": product_data.ingredients or "",
+            "allergens": product_data.allergens or "",
+            "image_url": product_data.image_url or "",
             "created_at": datetime.utcnow(),
         }
         
@@ -212,9 +233,14 @@ async def create_product_with_stores(
                 detail=f"Product with SKU '{product_data.sku}' already exists"
             )
         
+        print(f"Inserting product into database...")
         # Insert product
         result = products_collection.insert_one(product_dict)
         product_id = str(result.inserted_id)
+        print(f"Product created with ID: {product_id}")
+        
+        # Remove ObjectId and add string id
+        product_dict.pop("_id", None)
         product_dict["id"] = product_id
         
         # Add to inventory for each selected store
@@ -231,16 +257,25 @@ async def create_product_with_stores(
             inventory_items.append(inventory_item)
         
         if inventory_items:
+            print(f"Adding product to {len(inventory_items)} store(s)...")
             inventory_collection.insert_many(inventory_items)
+            print(f"✅ Product added to inventory")
         
-        return {
+        result_data = {
             **product_dict,
             "stores_added": len(product_data.selectedStores)
         }
         
+        print(f"✅ Product '{product_data.name}' created successfully!")
+        print(f"{'='*60}\n")
+        
+        return result_data
+        
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ Error creating product: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create product: {str(e)}"

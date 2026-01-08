@@ -172,6 +172,10 @@ class ApiService {
     return this.request('/api/inventory/stores');
   }
 
+  async getStoreInventory(storeId: string) {
+    return this.request(`/api/inventory/store/${storeId}`);
+  }
+
   // Purchase Orders endpoints
   async getSuppliers() {
     return this.request('/api/purchase-orders/suppliers');

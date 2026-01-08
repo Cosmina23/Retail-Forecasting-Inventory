@@ -205,8 +205,10 @@ const ProductImport = () => {
 
     setLoading(true);
     try {
-      await apiService.createProductWithStores(formData);
-      toast.success(`Product "${formData.name}" added to ${formData.selectedStores.length} store(s)`);
+      console.log('Submitting product data:', formData);
+      const result = await apiService.createProductWithStores(formData);
+      console.log('Product created:', result);
+      toast.success(`Product "${formData.name}" added to ${formData.selectedStores.length} store(s)!`);
       
       // Reset form
       setFormData(initialFormData);
@@ -218,7 +220,8 @@ const ProductImport = () => {
       // navigate('/inventory');
     } catch (error: any) {
       console.error("Failed to create product:", error);
-      toast.error(error.message || "Failed to add product");
+      const errorMessage = error?.message || error?.detail || "Failed to add product. Please check the console for details.";
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
