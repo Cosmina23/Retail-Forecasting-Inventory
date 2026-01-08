@@ -12,6 +12,7 @@ import Inventory from "./pages/Inventory";
 import Forecasting from "./pages/Forecasting";
 import History from "./pages/History";
 import PurchaseOrders from "./pages/PurchaseOrders";
+import ProductImport from "./pages/ProductImport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/index" element={<ShopSelector />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/inventory" element={<Inventory />} />
+          <Route path="/product-import" element={<ProductImport />} />
           <Route path="/forecasting" element={<Forecasting />} />
           <Route path="/purchase-orders" element={<PurchaseOrders />} />
           <Route path="/history" element={<History />} />

@@ -122,6 +122,35 @@ class ApiService {
     });
   }
 
+  async createProductWithStores(productData: any) {
+    return this.request('/api/products/with-stores', {
+      method: 'POST',
+      body: JSON.stringify(productData),
+    });
+  }
+
+  async extractBarcodeFromImage(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const url = `${this.baseUrl}/api/products/extract-barcode`;
+    const token = this.getToken();
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to extract barcode from image');
+    }
+
+    return await response.json();
+  }
+
   // Forecasting endpoints
   async getAvailableStores() {
     return this.request('/api/forecasting/stores');

@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart } from "lucide-react";
+import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart, Plus } from "lucide-react";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
@@ -43,6 +44,7 @@ interface Store {
 }
 
 const Inventory = () => {
+  const navigate = useNavigate();
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [leadTime, setLeadTime] = useState<number>(7);
@@ -137,6 +139,15 @@ const Inventory = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header with Add Products Button */}
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Inventory Management</h1>
+          <Button onClick={() => navigate('/product-import')} className="gap-2">
+            <Plus className="w-4 h-4" />
+            Add Products
+          </Button>
+        </div>
+
         {/* Header & Controls */}
         <Card className="animate-fade-up">
           <CardHeader>

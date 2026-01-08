@@ -29,9 +29,16 @@ class Product(BaseModel):
     id: Optional[str] = None
     name: str
     sku: str
+    barcode: Optional[str] = None  # EAN/GTIN barcode
     category: Optional[str] = None
     price: float
     current_stock: int = 0
+    manufacturer: Optional[str] = None  # German: Hersteller
+    origin_country: Optional[str] = None  # German: Herkunftsland
+    description: Optional[str] = None  # Product description
+    ingredients: Optional[str] = None  # German: Zutaten
+    allergens: Optional[str] = None  # German: Allergene
+    image_url: Optional[str] = None
     created_at: Optional[datetime] = None
 
 class Sale(BaseModel):
