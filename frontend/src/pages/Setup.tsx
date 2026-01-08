@@ -6,12 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet, Loader2 } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
+import { debug } from "console";
 
 const Setup = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
-  const [shopData, setShopData] = useState({ name: "", city: "" });
+  const [shopData, setShopData] = useState({ name: "", market: "" });
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -45,14 +47,25 @@ const Setup = () => {
   };
 
   const handleUploadToBackend = async () => {
-    if (!uploadedFile) return;
+    if (!uploadedFile || !storeId) {
+      toast({
+        variant: "destructive",
+        title: "Missing Store",
+        description: "Please create a store before importing products.",
+      });
+      return;
+    }
 
     setIsUploading(true);
     try {
-      const result = await apiService.importProducts(uploadedFile);
+      // Optionally, you can pass storeId to the backend if your import endpoint supports it
+      const store_id = localStorage.getItem('store_id');
+      const result = await apiService.importProducts(uploadedFile,store_id);
+      const imported = result.inserted_or_updated ?? result.inserted_count ?? 0;
+      const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
       toast({
         title: "Success!",
-        description: `Imported ${result.inserted_count} products successfully`,
+        description: `Imported ${imported} products successfully${errorCount ? `, ${errorCount} rows had issues` : ""}`,
       });
       setCurrentStep(3);
     } catch (error: any) {
@@ -82,15 +95,40 @@ const Setup = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="city">City / Location</Label>
+              <Label htmlFor="market">Market / Region</Label>
               <Input
-                id="city"
+                id="market"
                 placeholder="e.g., Berlin"
-                value={shopData.city}
-                onChange={(e) => setShopData({ ...shopData, city: e.target.value })}
+                value={shopData.market}
+                onChange={(e) => setShopData({ ...shopData, market: e.target.value })}
                 className="h-11"
               />
             </div>
+            <Button
+              variant="hero"
+              className="mt-4"
+              disabled={!shopData.name || !shopData.market}
+              onClick={async () => {
+                try {
+                  const store = await apiService.createStore({
+                    name: shopData.name,
+                    market: shopData.market,
+                  });
+                  setStoreId(store.id);
+                  localStorage.setItem('store_id',store.id);
+                  toast({ title: "Store created!", description: `Store ${store.name} created successfully.` });
+                  setCurrentStep(2);
+                } catch (error: any) {
+                  toast({
+                    variant: "destructive",
+                    title: "Store creation failed",
+                    description: error.message || "Could not create store",
+                  });
+                }
+              }}
+            >
+              Create Store & Continue <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
           </div>
         );
       case 2:

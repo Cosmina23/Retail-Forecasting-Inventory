@@ -13,6 +13,7 @@ const navItems = [
   { icon: Package, label: "Inventory", path: "/inventory" },
   { icon: TrendingUp, label: "Forecasting", path: "/forecasting" },
   { icon: History, label: "History", path: "/history" },
+  { icon: TrendingUp, label: "Sales", path: "/sales" },
 ];
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {

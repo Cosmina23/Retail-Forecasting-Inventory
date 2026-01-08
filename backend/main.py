@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pymongo import MongoClient
+from utils import create_indexes
 import os
 
 # Load environment variables
@@ -12,7 +13,7 @@ load_dotenv()
 app = FastAPI(
     title="Retail Forecasting & Inventory API",
     description="Backend API for retail forecasting and inventory management",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Configure CORS - Allow all origins for development
@@ -34,8 +35,7 @@ async def root():
         "status": "running"
     }
 
-# Health check endpoint
-@app.get("/health", response_model=HealthCheck, tags=["health"])
+@app.get("/api/health", response_model=HealthCheck, tags=["health"])
 def health_check():
     """Health check endpoint. Verifies API and MongoDB connection."""
     try:
@@ -50,12 +50,24 @@ def health_check():
     return HealthCheck(status="ok", database=db_status)
 
 # Import routers
-from routers import products,auth
+
+from routers import products, auth, stores, sales, inventory
 from services.chat import router as chat_router
+
+
+@app.on_event("startup")
+def startup_event():
+    """Create required indexes on startup."""
+    create_indexes()
+
+
+# Add routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
+app.include_router(stores.router, prefix="/api/stores", tags=["Stores"])
+app.include_router(sales.router, prefix="/api/sales", tags=["Sales"])
 app.include_router(chat_router, prefix="/api")
-# app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
+app.include_router(inventory.router, prefix="/api/data/inventory", tags=["Inventory"])
 # app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiService {
+  [x: string]: any;
   private baseUrl: string;
   private token: string | null = null;
 
@@ -8,6 +9,18 @@ class ApiService {
     this.baseUrl = API_BASE_URL;
     this.token = localStorage.getItem('access_token');
   }
+
+  // ...existing code...
+  // Sales endpoints
+  async getSales(skip = 0, limit = 100, days = 30) {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit), days: String(days) });
+    return this.request(`/api/sales/?${params.toString()}`);
+  }
+
+  async getSalesSummary(days = 30) {
+    return this.request(`/api/sales/summary?days=${days}`);
+  }
+ 
 
   setToken(token: string) {
     this.token = token;
@@ -102,6 +115,18 @@ class ApiService {
     return this.request(`/api/products/${productId}`);
   }
 
+  async getInventory(storeId: string, skip = 0, limit = 200) {
+    if (!storeId) throw new Error('storeId required');
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    return this.request(`/api/data/inventory/store/${storeId}?${params.toString()}`);
+  }
+
+  async getLowStock(storeId: string, skip = 0, limit = 200) {
+    if (!storeId) throw new Error('storeId required');
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    return this.request(`/api/data/inventory/low-stock/${storeId}?${params.toString()}`);
+  }
+
   async createProduct(product: any) {
     return this.request('/api/products/', {
       method: 'POST',
@@ -122,9 +147,15 @@ class ApiService {
     });
   }
 
-  async importProducts(file: File) {
+  async importProducts(file: File,store_id:string) {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('store_id', store_id);
+      if (!store_id) {
+        alert('No store selected!');
+        return;
+    }
+
 
     const url = `${this.baseUrl}/api/products/import`;
     const token = this.getToken();
@@ -137,7 +168,7 @@ class ApiService {
     const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: formData,
+      body: formData
     });
 
     if (!response.ok) {
@@ -150,6 +181,21 @@ class ApiService {
     }
 
     return await response.json();
+  }
+   // Stores endpoints
+  async createStore(store: { name: string; market: string; address?: string }) {
+    return this.request('/api/stores/', {
+      method: 'POST',
+      body: JSON.stringify(store),
+    });
+  }
+
+  async getMyStores() {
+    return this.request('/api/stores/me');
+  }
+
+  async getStore(storeId: string) {
+    return this.request(`/api/stores/${storeId}`);
   }
 }
 

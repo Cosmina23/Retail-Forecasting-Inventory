@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,16 +22,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Package } from "lucide-react";
 
-const initialProducts = [
-  { sku: "EL-001", name: "Samsung Galaxy S23", stock: 45, safetyStock: 20, status: "in-stock" },
-  { sku: "EL-002", name: "Apple iPhone 15 Pro", stock: 12, safetyStock: 15, status: "low-stock" },
-  { sku: "CL-001", name: "Nike Air Max 90", stock: 67, safetyStock: 30, status: "in-stock" },
-  { sku: "CL-002", name: "Levi's 501 Jeans", stock: 8, safetyStock: 25, status: "low-stock" },
-  { sku: "HO-001", name: "Philips Air Purifier", stock: 23, safetyStock: 10, status: "in-stock" },
-  { sku: "HO-002", name: "Dyson V15 Vacuum", stock: 5, safetyStock: 8, status: "low-stock" },
-  { sku: "EL-003", name: "Sony WH-1000XM5", stock: 34, safetyStock: 15, status: "in-stock" },
-  { sku: "CL-003", name: "Adidas Ultraboost", stock: 52, safetyStock: 20, status: "in-stock" },
-];
+// placeholder until loaded from backend
+const initialProducts: Array<any> = [];
 
 const Inventory = () => {
   const [products, setProducts] = useState(initialProducts);
@@ -62,6 +54,30 @@ const Inventory = () => {
     setNewProduct({ sku: "", name: "", stock: "", safetyStock: "" });
     setIsDialogOpen(false);
   };
+
+  useEffect(() => {
+    const loadInventory = async () => {
+      try {
+        const storeId = localStorage.getItem("store_id");
+        if (!storeId) return;
+        // @ts-ignore
+        const inv = await (await import("@/services/api")).apiService.getInventory(storeId);
+        // Map inventory items to UI shape
+        const mapped = (inv || []).map((it: any) => ({
+          sku: it.product_sku || it.product_id,
+          name: it.product_name || "Unnamed product",
+          stock: Number(it.quantity || 0),
+          safetyStock: Number(it.safety_stock ?? it.reorder_point ?? 0),
+          status: Number(it.quantity || 0) > Number(it.safety_stock ?? it.reorder_point ?? 0) ? "in-stock" : "low-stock",
+        }));
+        setProducts(mapped);
+      } catch (err) {
+        console.error("Failed to load inventory:", err);
+      }
+    };
+
+    loadInventory();
+  }, []);
 
   return (
     <DashboardLayout>

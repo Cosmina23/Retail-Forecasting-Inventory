@@ -7,6 +7,16 @@ export const api = axios.create({
   timeout: 10000,
 })
 
+// Attach Authorization header for all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const getProducts = async (skip = 0, limit = 100) => {
   const response = await api.get('/products/', { params: { skip, limit } })
   return response.data

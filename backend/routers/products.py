@@ -1,100 +1,145 @@
-from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
-from typing import List
 from datetime import datetime
+from fastapi import APIRouter, HTTPException, status, Depends, Form, UploadFile, File
+from typing import List
 from pathlib import Path
 import tempfile
 import os
 
 from models import Product
-from database import products_collection
 from utils.auth import get_current_user
-from bson import ObjectId
-from dal.products_repo import insert_products, get_all_products, get_product_by_sku, get_products_by_category
+from dal.products_repo import (
+    list_products,
+    get_product_by_id,
+    create_product,
+    insert_products,
+    update_product as repo_update_product,
+    delete_product as repo_delete_product,
+    upsert_product_by_sku,
+)
 from services.data_importer import import_products_from_excel, import_products_from_csv
+from dal.inventory_repo import create_inventory
 
 router = APIRouter()
 
 
+def _normalize_import_doc(doc: dict) -> dict:
+    """Normalize raw import doc into a product payload."""
+    # Support both standard and Romanian column names
+    name = doc.get("name") or doc.get("Denumire")
+    sku = doc.get("sku")  # Still allow if present, but optional
+    price = doc.get("price") or doc.get("Valoare")
+    quantity = doc.get("quantity") or doc.get("Cantitate")
+    date = doc.get("date") or doc.get("Data")
+
+    if name is None or price is None:
+        raise ValueError("Missing required fields: name/Denumire, price/Valoare")
+
+    try:
+        price_val = float(str(price).replace(",", "").replace(" ", ""))
+    except Exception:
+        raise ValueError(f"Invalid price/Valoare for product {name}")
+
+    cost_val = None
+    if doc.get("cost") not in (None, "", "null", "None"):
+        try:
+            cost_val = float(doc.get("cost"))
+        except Exception:
+            raise ValueError(f"Invalid cost for product {name}")
+
+    store_ids_raw = doc.get("store_ids")
+    store_ids: List[str] = []
+    if isinstance(store_ids_raw, list):
+        store_ids = [str(s).strip() for s in store_ids_raw if str(s).strip()]
+    elif isinstance(store_ids_raw, str):
+        store_ids = [s.strip() for s in store_ids_raw.split(",") if s.strip()]
+    elif store_ids_raw not in (None, "", "null", "None"):
+        store_ids = [str(store_ids_raw).strip()]
+
+    # Optionally parse quantity and date if needed for inventory or audit
+    result = {
+        "name": name,
+        "sku": str(sku) if sku is not None else None,
+        "price": price_val,
+        "category": doc.get("category"),
+        "cost": cost_val,
+        "user_id": doc.get("user_id"),
+        "store_ids": store_ids,
+        "abc_classification": doc.get("abc_classification"),
+    }
+    if quantity is not None:
+        try:
+            result["quantity"] = float(str(quantity).replace(",", "").replace(" ", ""))
+        except Exception:
+            pass
+    if date is not None:
+        result["date"] = date
+    return result
+
+
 @router.get("/", response_model=List[dict])
-async def get_products(current_user: str = Depends(get_current_user)):
-    """Get all products"""
-    products = []
-    for product in products_collection.find():
-        product["id"] = str(product.pop("_id"))
-        products.append(product)
-    return products
+async def get_products(skip: int = 0, limit: int = 100, current_user: str = Depends(get_current_user)):
+    """Get all products with pagination."""
+    return list_products(skip=skip, limit=limit)
+
 
 @router.get("/{product_id}", response_model=dict)
 async def get_product(product_id: str, current_user: str = Depends(get_current_user)):
-    """Get a specific product"""
-    product = products_collection.find_one({"_id": ObjectId(product_id)})
+    """Get a specific product by ID."""
+    product = get_product_by_id(product_id)
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found"
-        )
-    product["id"] = str(product.pop("_id"))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
     return product
 
+
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def create_product(product: Product, current_user: str = Depends(get_current_user)):
-    """Create a new product"""
+async def create_product_endpoint(product: Product, current_user: str = Depends(get_current_user)):
+    """Create a new product."""
+    # Attach current user's store_id if not present
+    from dal.stores_repo import get_stores_by_user
+    user_stores = get_stores_by_user(current_user)
+    if not user_stores:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No store found for current user")
+    store_id = user_stores[0]["id"]
     product_dict = product.dict(exclude={"id"})
     product_dict["created_at"] = datetime.utcnow()
-    
-    result = products_collection.insert_one(product_dict)
-    product_dict["id"] = str(result.inserted_id)
-    
-    return product_dict
-
+    if not product_dict.get("store_ids"):
+        product_dict["store_ids"] = [store_id]
+    elif store_id not in product_dict["store_ids"]:
+        product_dict["store_ids"].append(store_id)
+    created = create_product(**product_dict)
+    return created
 
 
 @router.put("/{product_id}", response_model=dict)
-async def update_product(product_id: str, product: Product, current_user: str = Depends(get_current_user)):
-    """Update a product"""
-    product_dict = product.dict(exclude={"id", "created_at"})
-    
-    result = products_collection.update_one(
-        {"_id": ObjectId(product_id)},
-        {"$set": product_dict}
-    )
-    
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found"
-        )
-    
-    updated_product = products_collection.find_one({"_id": ObjectId(product_id)})
-    updated_product["id"] = str(updated_product.pop("_id"))
-    return updated_product
+async def update_product_endpoint(product_id: str, product: Product, current_user: str = Depends(get_current_user)):
+    """Update a product."""
+    updates = product.dict(exclude={"id", "created_at"}, exclude_none=True)
+    updated = repo_update_product(product_id, updates)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    return updated
+
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_product(product_id: str, current_user: str = Depends(get_current_user)):
-    """Delete a product"""
-    result = products_collection.delete_one({"_id": ObjectId(product_id)})
-    
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found"
-        )
-    
+async def delete_product_endpoint(product_id: str, current_user: str = Depends(get_current_user)):
+    """Delete a product."""
+    deleted = repo_delete_product(product_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
     return None
 
 
 @router.post("/import", status_code=status.HTTP_201_CREATED)
 async def import_products_endpoint(
-    file: UploadFile = File(...),
+    file:UploadFile=File(...), 
+    store_id:str=Form(...),
     current_user: str = Depends(get_current_user)
 ):
     """
     Import products from an Excel or CSV file.
-    
-    Accepts .xlsx, .xls, or .csv files with product data.
-    Expected columns: name, sku, category, price, current_stock
+    Expected columns: name, sku, price, (optional) category, cost, store_ids (comma list), user_id
     """
-    # Validate file extension
+    print("Received store_id:", store_id)
     filename_lower = file.filename.lower()
     is_excel = filename_lower.endswith((".xlsx", ".xls"))
     is_csv = filename_lower.endswith(".csv")
@@ -132,25 +177,66 @@ async def import_products_endpoint(
                 detail=f"No valid products found in the {file_type} file"
             )
         
-        # Insert products into database
-        result = insert_products(products_data)
-        
-        print(f"[DEBUG] Inserted {result['inserted_count']} products")
-        
+        import uuid
+        successes: list = []
+        errors: list = []
+        for idx, raw in enumerate(products_data):
+            try:
+                normalized = _normalize_import_doc(raw)
+                # enforce store association
+                normalized["store_ids"] = [store_id]
+
+                # normalize SKU: treat '', 'none', 'null' (any case) as missing
+                raw_sku = normalized.get("sku")
+                if raw_sku is None:
+                    is_missing_sku = True
+                else:
+                    sku_str = str(raw_sku).strip()
+                    is_missing_sku = sku_str == "" or sku_str.lower() in ("none", "null")
+                if is_missing_sku:
+                    normalized["sku"] = f"auto-{uuid.uuid4()}"
+                else:
+                    normalized["sku"] = sku_str
+
+                try:
+                    # Only pass fields expected by create_product
+                    product_payload = {
+                        "name": normalized.get("name"),
+                        "sku": normalized.get("sku"),
+                        "price": normalized.get("price"),
+                        "category": normalized.get("category"),
+                        "cost": normalized.get("cost"),
+                        "user_id": normalized.get("user_id"),
+                        "store_ids": normalized.get("store_ids"),
+                        "abc_classification": normalized.get("abc_classification"),
+                    }
+                    created = create_product(**product_payload)
+                    product_id = created.get("id", None)
+                except Exception as e:
+                    errors.append({"row": idx + 2, "error": f"Product creation failed: {str(e)}", "data": normalized})
+                    continue
+
+                try:
+                    # create or update inventory quantity for this product in the store
+                   create_inventory(
+                        product_id=product_id,
+                        store_id=store_id,
+                        quantity=normalized.get("quantity", 0)
+                    )
+                except Exception as e:
+                    errors.append({"row": idx + 2, "error": f"Inventory creation failed: {str(e)}", "data": normalized})
+
+                successes.append(product_id)
+            except Exception as e:
+                errors.append({"row": idx + 2, "error": f"Normalization failed: {str(e)}", "raw": raw})
+
+        # Return summary
         return {
-            "message": f"Successfully imported {result['inserted_count']} products from {file_type}",
-            "inserted_count": result['inserted_count'],
-            "inserted_ids": result['inserted_ids']
+            "message": f"Successfully processed {len(successes)} rows",
+            "inserted_count": len(successes),
+            "inserted_ids": successes,
+            "errors": errors,
         }
-    
-    except Exception as e:
-        print(f"[ERROR] Import failed: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error importing products: {str(e)}"
-        )
     finally:
         # Clean up temporary file
         if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):

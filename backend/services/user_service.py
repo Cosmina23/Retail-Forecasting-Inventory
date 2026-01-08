@@ -40,25 +40,37 @@ async def register_user(user_data: UserCreate) -> Dict[str, Any]:
     
     # Hash password
     hashed_password = get_password_hash(user_data.password)
-    
+
     # Create user in database
     user_doc = await create_user(
         email=user_data.email,
         full_name=user_data.full_name,
         hashed_password=hashed_password
     )
-    
+
+    # Create a store for the user
+    from dal.stores_repo import create_store
+    store_name = user_data.full_name + "'s Store" if user_data.full_name else user_data.email + "'s Store"
+    market = user_data.market or "default"
+    store_doc = create_store(
+        name=store_name,
+        user_id=user_doc["id"],
+        market=market
+    )
+
     # Generate access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user_data.email},
+        user_id=user_doc["id"],
         expires_delta=access_token_expires
     )
-    
+
     return {
-        "message": "User created successfully",
+        "message": "User and store created successfully",
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "store_id": store_doc["id"],
+        "store": store_doc
     }
 
 
@@ -90,13 +102,13 @@ def login_user(login_data: UserLogin) -> Dict[str, str]:
             detail="Incorrect email or password"
         )
     
-    # Generate access token
+    # Generate access token with user_id
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": login_data.email},
+        user_id=user["id"],
         expires_delta=access_token_expires
     )
-    
+
     return {
         "access_token": access_token,
         "token_type": "bearer"
