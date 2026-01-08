@@ -11,11 +11,11 @@ from database import db
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-router = APIRouter(prefix="/sales", tags=["sales"])
+router = APIRouter(tags=["sales"])
 
 sales_collection = db["sales"]
-products_collection = db.get("products")
-inventory_collection = db.get("inventory")
+products_collection = db["products"]
+inventory_collection = db["inventory"]
 
 
 @router.get("/", response_model=List[dict])

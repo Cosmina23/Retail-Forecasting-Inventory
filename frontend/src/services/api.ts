@@ -134,18 +134,6 @@ class ApiService {
     return this.request('/api/stores');  // ✅ Fix: add /api prefix
   }
 
-  async getStore(storeId: string) {
-    return this.request(`/api/stores/${storeId}`);
-  }
-
-  async createStore(store: any) {
-    console.log('Creating store with data:', store);
-    return this.request('/api/stores', {
-      method: 'POST',
-      body: JSON.stringify(store),
-    });
-  }
-
   async updateStore(storeId: string, store: any) {
     return this.request(`/api/stores/${storeId}`, {
       method: 'PUT',

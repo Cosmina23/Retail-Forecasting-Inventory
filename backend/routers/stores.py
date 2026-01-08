@@ -8,7 +8,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from datetime import datetime, timedelta
 
-router = APIRouter(prefix="/stores", tags=["stores"])
+router = APIRouter(tags=["stores"])
 
 # DB collections used for metrics and some ad-hoc endpoints
 sales_collection = db["sales"]
