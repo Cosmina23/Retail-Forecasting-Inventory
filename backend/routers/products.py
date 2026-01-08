@@ -102,7 +102,7 @@ async def delete_product(product_id: str, current_user: str = Depends(get_curren
     return None
 
 @router.post("/extract-barcode")
-async def extract_barcode(file: UploadFile = File(...), current_user: str = Depends(get_current_user)):
+async def extract_barcode(file: UploadFile = File(...)):
     """Extract barcode from uploaded image using pyzbar with enhanced detection"""
     if not BARCODE_SCANNING_AVAILABLE:
         raise HTTPException(
