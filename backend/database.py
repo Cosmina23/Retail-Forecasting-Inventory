@@ -19,6 +19,7 @@ products_collection = db["products"]
 sales_collection = db["sales"]
 inventory_collection = db["inventory"]
 forecasts_collection = db["forecasts"]
+stores_collection = db["stores"]
 
 def get_database():
     """Return database instance"""

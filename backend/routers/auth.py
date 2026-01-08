@@ -92,19 +92,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=dict)
-async def get_current_user_info(current_user: str = Depends(get_current_user)):
+async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """Get current user information"""
-    user = users_collection.find_one({"email": current_user})
-    if not user:
+    if not current_user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
         )
     
     return {
-        "id": str(user["_id"]),
-        "email": user["email"],
-        "full_name": user.get("full_name"),
-        "created_at": user["created_at"],
-        "is_active": user["is_active"]
+        "id": str(current_user["_id"]),
+        "email": current_user["email"],
+        "full_name": current_user.get("full_name"),
+        "created_at": current_user["created_at"],
+        "is_active": current_user["is_active"]
     }

@@ -4,9 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet } from "lucide-react";
+import { storesApi } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Setup = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [shopData, setShopData] = useState({ name: "", city: "" });
   const [isDragging, setIsDragging] = useState(false);

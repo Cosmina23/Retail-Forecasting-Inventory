@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart } from "lucide-react";
+import { Plus, Search, Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart } from "lucide-react";
+import { useParams } from "react-router-dom";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
@@ -43,6 +44,17 @@ interface Store {
 }
 
 const Inventory = () => {
+  const params = useParams();
+  const routeStoreId = params.storeId || null;
+  const [products, setProducts] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    sku: "",
+    name: "",
+    stock: "",
+    safetyStock: "",
+  });
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [leadTime, setLeadTime] = useState<number>(7);
@@ -96,6 +108,38 @@ const Inventory = () => {
     }
   };
 
+  useEffect(() => {
+    const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
+    const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
+
+    if (!storeId) {
+      setLoading(false);
+      return;
+    }
+
+    fetchInventory(storeId);
+  }, [routeStoreId]);
+
+  const fetchInventory = async (storeId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/inventory?store_id=${storeId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch inventory", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredProducts = products.filter(
+    (p) =>
+      p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.sku?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
   const getABCColor = (classification: string) => {
     switch (classification) {
       case "A": return "bg-emerald-500/10 text-emerald-500";
@@ -133,6 +177,46 @@ const Inventory = () => {
       minimumFractionDigits: 0,
     }).format(value);
   };
+
+  const handleAddProduct = async () => {
+    const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
+    const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
+
+    if (!storeId) return;
+
+    const product = {
+      sku: newProduct.sku,
+      name: newProduct.name,
+      stock: parseInt(newProduct.stock),
+      safetyStock: parseInt(newProduct.safetyStock),
+      store_id: storeId,
+      status: parseInt(newProduct.stock) > parseInt(newProduct.safetyStock) ? "in-stock" : "low-stock",
+    };
+
+    try {
+      const res = await fetch(`http://localhost:8000/api/inventory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(product),
+      });
+
+      if (res.ok) {
+        setProducts([...products, product]);
+        setNewProduct({ sku: "", name: "", stock: "", safetyStock: "" });
+        setIsDialogOpen(false);
+      }
+    } catch (e) {
+      console.error("Failed to add product", e);
+    }
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">Loading inventory...</div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -199,8 +283,8 @@ const Inventory = () => {
               </div>
 
               <div className="flex items-end">
-                <Button 
-                  onClick={handleOptimize} 
+                <Button
+                  onClick={handleOptimize}
                   disabled={loading || !selectedStore}
                   className="w-full"
                 >

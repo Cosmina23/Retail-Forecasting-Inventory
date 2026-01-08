@@ -61,3 +61,9 @@ class ForecastResponse(BaseModel):
     forecast_data: List[dict]
     accuracy_score: Optional[float] = None
     generated_at: datetime
+
+class Store(BaseModel):
+    name: str
+    status: str = "online"
+    revenue: float = 0.0
+

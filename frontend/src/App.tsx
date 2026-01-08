@@ -28,11 +28,12 @@ const App = () => (
           <Route path="/setup" element={<Setup />} />
           <Route path="/index" element={<ShopSelector />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/:storeId" element={<Dashboard />} />
           <Route path="/inventory" element={<Inventory />} />
-          <Route path="/forecasting" element={<Forecasting />} />
-          <Route path="/purchase-orders" element={<PurchaseOrders />} />
-          <Route path="/history" element={<History />} />
-          <Route path="*" element={<NotFound />} />
+          <Route path="/inventory/:storeId" element={<Inventory />} />
+          <Route path="/forecasting/:storeId" element={<Forecasting />} />
+          <Route path="/history/:storeId" element={<History />} />
+          <Route path="/purchase-orders/:storeId" element={<PurchaseOrders />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

@@ -7,6 +7,7 @@ import joblib
 import holidays
 from pathlib import Path
 from datetime import datetime, timedelta
+from database import db, sales_collection, inventory_collection
 
 router = APIRouter()
 
@@ -141,37 +142,47 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
 async def predict_forecast(request: ForecastRequest):
     """
     Generate forecasts for all products in a store for the next N days
+    Now reads from MongoDB instead of CSV files
     """
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded. Please check server logs.")
     
     try:
-        # Load mock data for the store
-        MOCK_DATA_DIR = Path(__file__).parent.parent / "mock_data"
-        
-        # Load sales history to get last known values
-        sales_history_path = MOCK_DATA_DIR / "sales_history.csv"
-        current_inventory_path = MOCK_DATA_DIR / "current_inventory.csv"
-        
-        if not sales_history_path.exists() or not current_inventory_path.exists():
-            raise HTTPException(status_code=404, detail="Mock data files not found")
-        
-        sales_history = pd.read_csv(sales_history_path, parse_dates=["date"])
-        current_inventory = pd.read_csv(current_inventory_path)
-        
-        # Filter for the requested store
-        store_sales = sales_history[sales_history["store_id"] == int(request.store_id)]
-        store_inventory = current_inventory[current_inventory["store_id"] == int(request.store_id)]
-        
-        if store_sales.empty:
+        print(f"📊 Fetching data from MongoDB for store {request.store_id}")
+
+        # Read from MongoDB instead of CSV
+        sales_cursor = sales_collection.find({"store_id": request.store_id})
+        sales_data = list(sales_cursor)
+
+        inventory_cursor = inventory_collection.find({"store_id": request.store_id})
+        inventory_data = list(inventory_cursor)
+
+        if not sales_data:
             raise HTTPException(status_code=404, detail=f"No sales data found for store {request.store_id}")
         
+        if not inventory_data:
+            raise HTTPException(status_code=404, detail=f"No inventory data found for store {request.store_id}")
+
+        print(f"✅ Found {len(sales_data)} sales records and {len(inventory_data)} inventory items")
+
+        # Convert to DataFrames
+        sales_history = pd.DataFrame(sales_data)
+        current_inventory = pd.DataFrame(inventory_data)
+
+        # Parse dates
+        sales_history['date'] = pd.to_datetime(sales_history['date'])
+
         # Calculate lag features from history
         products_data = []
-        for product in store_inventory["product"].unique():
-            prod_sales = store_sales[store_sales["product"] == product].sort_values("date")
-            prod_inv = store_inventory[store_inventory["product"] == product].iloc[0]
-            
+        for product in current_inventory["product"].unique():
+            prod_sales = sales_history[sales_history["product"] == product].sort_values("date")
+            prod_inv_match = current_inventory[current_inventory["product"] == product]
+
+            if prod_inv_match.empty:
+                continue
+
+            prod_inv = prod_inv_match.iloc[0]
+
             if len(prod_sales) > 0:
                 last_sale = prod_sales.iloc[-1]["quantity"]
                 last_week_sale = prod_sales.iloc[-7]["quantity"] if len(prod_sales) >= 7 else last_sale
@@ -184,12 +195,12 @@ async def predict_forecast(request: ForecastRequest):
             products_data.append({
                 "product": product,
                 "category": prod_inv["category"],
-                "current_stock": prod_inv["stock_quantity"],
+                "current_stock": prod_inv.get("stock_quantity", 0),
                 "last_sale": last_sale,
                 "last_week_sale": last_week_sale,
                 "avg_7day": avg_7day,
-                "customers": prod_sales["customers"].mean() if len(prod_sales) > 0 else 100,
-                "competition_distance": store_sales["competition_distance"].iloc[0] if "competition_distance" in store_sales.columns else 999999,
+                "customers": prod_sales["customers"].mean() if len(prod_sales) > 0 and "customers" in prod_sales.columns else 100,
+                "competition_distance": sales_history["competition_distance"].iloc[0] if "competition_distance" in sales_history.columns and len(sales_history) > 0 else 999999,
                 "promo": 0,
                 "promo2": 0
             })
@@ -204,12 +215,10 @@ async def predict_forecast(request: ForecastRequest):
         
         # Debug: Print sample features
         print(f"\n🔍 DEBUG: Forecast DataFrame shape: {forecast_df.shape}")
-        print(f"🔍 DEBUG: Sample row (first product, first day):")
         if len(forecast_df) > 0:
+            print(f"🔍 DEBUG: Sample row (first product, first day):")
             print(forecast_df.iloc[0][["product", "date", "lag_1", "lag_7", "r7", "customers"]])
-            print(f"🔍 DEBUG: X_forecast sample:")
-            print(X_forecast.iloc[0])
-        
+
         predictions = model.predict(X_forecast, num_iteration=model.best_iteration)
         print(f"🔍 DEBUG: Predictions sample: {predictions[:5]}")
         predictions = np.maximum(predictions, 0)  # No negative sales
@@ -265,7 +274,12 @@ async def predict_forecast(request: ForecastRequest):
             total_revenue_forecast=round(total_revenue, 2)
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"❌ Forecasting error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Forecasting error: {str(e)}")
 
 
