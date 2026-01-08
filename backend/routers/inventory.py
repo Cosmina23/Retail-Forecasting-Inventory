@@ -76,11 +76,7 @@ def get_low_stock_for_store(store_id: str, current_user: str = Depends(get_curre
 async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_level: float = 0.95):
     """
     Calculate inventory optimization metrics for a store
-    
-    Parameters:
-    - store_id: Store identifier
-    - lead_time_days: Lead time for reordering (default: 7 days)
-    - service_level: Target service level (default: 0.95 = 95%)
+    Now reads from MongoDB instead of CSV files
     """
     try:
         # Use real inventory from DB
@@ -178,35 +174,29 @@ async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_lev
                 "abc_classification": "",
                 "status": "",
             })
-        
-        # Create DataFrame for ABC analysis
+
         metrics_df = pd.DataFrame(metrics_list)
-        
-        # Perform ABC analysis
         metrics_df = perform_abc_analysis(metrics_df)
-        
-        # Add stock status
+
         metrics_df['status'] = metrics_df.apply(
             lambda row: get_stock_status(
-                row['current_stock'], 
-                row['reorder_point'], 
+                row['current_stock'],
+                row['reorder_point'],
                 row['safety_stock']
-            ), 
+            ),
             axis=1
         )
-        
-        # Convert back to list of dicts
+
         metrics_list = metrics_df.to_dict('records')
-        
-        # Calculate ABC summary
+
         abc_summary = {
             "A": int(metrics_df[metrics_df['abc_classification'] == 'A'].shape[0]),
             "B": int(metrics_df[metrics_df['abc_classification'] == 'B'].shape[0]),
             "C": int(metrics_df[metrics_df['abc_classification'] == 'C'].shape[0])
         }
-        
+
         total_annual_revenue = float(metrics_df['annual_revenue'].sum())
-        
+
         return InventoryOptimizationResponse(
             store_id=store_id,
             total_products=len(metrics_list),
@@ -214,8 +204,11 @@ async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_lev
             abc_summary=abc_summary,
             total_annual_revenue=total_annual_revenue
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"❌ Error in inventory optimization: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Optimization error: {str(e)}")
 
 @router.get("/stores")
@@ -226,13 +219,13 @@ async def get_stores_for_inventory():
     try:
         MOCK_DATA_DIR = Path(__file__).parent.parent / "mock_data"
         sales_history_path = MOCK_DATA_DIR / "sales_history.csv"
-        
+
         if not sales_history_path.exists():
             return {"stores": []}
-        
+
         sales_history = pd.read_csv(sales_history_path)
         stores = sales_history["store_id"].unique().tolist()
-        
+
         return {"stores": [{"id": int(s), "name": f"Store {s}"} for s in stores]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

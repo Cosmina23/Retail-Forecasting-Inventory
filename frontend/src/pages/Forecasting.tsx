@@ -99,7 +99,7 @@ const Forecasting = () => {
   };
 
   // Prepare chart data
-  const chartData = forecastData ? 
+  const chartData = forecastData ?
     forecastData.products[0]?.dates.map((date, idx) => ({
       date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       ...Object.fromEntries(
@@ -155,8 +155,8 @@ const Forecasting = () => {
               </div>
 
               <div className="flex items-end">
-                <Button 
-                  onClick={handleForecast} 
+                <Button
+                  onClick={handleForecast}
                   disabled={loading || !selectedStore}
                   className="w-full"
                 >
@@ -196,7 +196,7 @@ const Forecasting = () => {
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
                 <CardContent className="p-5">
                   <div className="flex items-center gap-3">
@@ -212,7 +212,7 @@ const Forecasting = () => {
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card className="animate-fade-up" style={{ animationDelay: "0.1s" }}>
                 <CardContent className="p-5">
                   <div className="flex items-center gap-3">
@@ -254,9 +254,9 @@ const Forecasting = () => {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
                         <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'hsl(var(--popover))', 
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
                             border: '1px solid hsl(var(--border))',
                             borderRadius: '8px'
                           }}

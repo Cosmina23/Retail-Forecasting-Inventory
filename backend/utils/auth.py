@@ -1,33 +1,52 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from database import users_collection
 import os
-from dotenv import load_dotenv
+from passlib.context import CryptContext
+import bcrypt
 
-load_dotenv()
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+# auto_error=False permite requests fără token
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=False)
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a hash"""
-    return bcrypt.checkpw(
-        plain_password.encode('utf-8'), 
-        hashed_password.encode('utf-8')
-    )
+    try:
+        # Bcrypt lucrează cu bytes, deci convertim string-urile
+        password_bytes = plain_password.encode('utf-8')
+        hashed_bytes = hashed_password.encode('utf-8')
+
+        # Verificăm parola direct cu librăria bcrypt
+        return bcrypt.checkpw(password_bytes, hashed_bytes)
+    except Exception as e:
+        print(f"Eroare la verificarea parolei: {e}")
+        return False
+
 
 def get_password_hash(password: str) -> str:
-    """Hash a password"""
+    """Hash a password using bcrypt directly"""
+    # Bcrypt are o limită de 72 de caractere.
+    # Dacă parola este mai lungă, o trunchiem pentru siguranță.
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+
+    # Generăm un salt și hash-uim parola
     salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8')
+    hashed_password = bcrypt.hashpw(password_bytes, salt)
+
+    # Returnăm hash-ul ca string (pentru a fi salvat în DB)
+    return hashed_password.decode('utf-8')
 
 def create_access_token(user_id: str, expires_delta: Optional[timedelta] = None):
     """Create a JWT access token with user_id as sub"""

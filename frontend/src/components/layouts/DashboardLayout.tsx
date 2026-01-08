@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, Package, TrendingUp, History, ChevronLeft, Settings, Bell, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,42 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const [storeName, setStoreName] = useState<string | null>(null);
+  const [userInitials, setUserInitials] = useState<string>("U");
+  const [storeId, setStoreId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const sel = localStorage.getItem("selectedStore");
+      if (sel) {
+        const store = JSON.parse(sel);
+        setStoreName(store.name || null);
+        setStoreId(store._id || store.id || null);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      const u = localStorage.getItem("user");
+      if (u) {
+        const user = JSON.parse(u);
+        if (user.name) {
+          const parts = String(user.name).split(" ").filter(Boolean);
+          const initials = parts.map((p: string) => p[0]).slice(0, 2).join("");
+          setUserInitials(initials.toUpperCase());
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  const linkFor = (basePath: string) => {
+    if (!storeId) return basePath;
+    return `${basePath}/${storeId}`;
+  };
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
@@ -40,16 +76,16 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         </div>
 
         <div className="px-3 py-2">
-          <p className="text-xs text-muted-foreground px-3 mb-2">Berlin Alexanderplatz</p>
+          <p className="text-xs text-muted-foreground px-3 mb-2">{storeName || "No Store Selected"}</p>
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + "/");
             return (
               <Link
                 key={item.path}
-                to={item.path}
+                to={linkFor(item.path)}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   isActive
@@ -80,7 +116,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         {/* Top Bar */}
         <header className="h-14 border-b bg-card flex items-center justify-between px-6">
           <h1 className="font-semibold text-foreground">
-            {navItems.find((item) => item.path === location.pathname)?.label || "Dashboard"}
+            {navItems.find((item) => item.path === location.pathname || location.pathname.startsWith(item.path + "/"))?.label || "Dashboard"}
           </h1>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className="relative">
@@ -88,7 +124,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
             </Button>
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
-              TM
+              {userInitials}
             </div>
           </div>
         </header>

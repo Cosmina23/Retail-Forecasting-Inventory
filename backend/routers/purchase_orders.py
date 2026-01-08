@@ -4,6 +4,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import pandas as pd
 import os
+from database import db, sales_collection, inventory_collection
 
 router = APIRouter(tags=["purchase_orders"])
 
@@ -306,16 +307,83 @@ async def generate_from_recommendations(
 ):
     """
     Auto-generate PO from inventory optimization recommendations
-    Uses current inventory data to determine what needs to be ordered
+    Now uses MongoDB data instead of CSV files
     """
-    
-    # Load mock data
-    mock_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mock_data")
-    
+
     try:
-        sales_df = pd.read_csv(os.path.join(mock_dir, "sales_history.csv"))
-        inventory_df = pd.read_csv(os.path.join(mock_dir, "current_inventory.csv"))
+        print(f"📊 Fetching data from MongoDB for store {store_id}")
+
+        # Read from MongoDB instead of CSV
+        sales_cursor = sales_collection.find({"store_id": str(store_id)})
+        sales_data = list(sales_cursor)
+
+        inventory_cursor = inventory_collection.find({"store_id": str(store_id)})
+        inventory_data = list(inventory_cursor)
+
+        if not sales_data:
+            raise HTTPException(status_code=404, detail=f"No sales data found for store {store_id}")
+
+        if not inventory_data:
+            raise HTTPException(status_code=404, detail=f"No inventory data found for store {store_id}")
+
+        print(f"✅ Found {len(sales_data)} sales records and {len(inventory_data)} inventory items")
+
+        # Convert to DataFrames
+        sales_df = pd.DataFrame(sales_data)
+        inventory_df = pd.DataFrame(inventory_data)
+
+        # Calculate what needs to be ordered
+        items = []
+        for _, inv_row in inventory_df.iterrows():
+            product = inv_row['product']
+            current_stock = inv_row.get('stock_quantity', 0)
+
+            # Calculate average daily demand
+            product_sales = sales_df[sales_df['product'] == product]
+            if not product_sales.empty:
+                avg_daily_demand = product_sales['quantity'].mean()
+
+                # Simple reorder logic: if stock < 7 days of demand
+                reorder_threshold = avg_daily_demand * 7
+
+                if current_stock < reorder_threshold:
+                    # Order 14 days worth of stock
+                    order_qty = int(avg_daily_demand * 14)
+
+                    # Get product info
+                    category = inv_row['category']
+                    unit_price = product_sales['price'].mean() if 'price' in product_sales.columns else 10.0
+
+                    items.append(PurchaseOrderItem(
+                        product_name=product,
+                        category=category,
+                        quantity=order_qty,
+                        unit_price=unit_price
+                    ))
+
+        if not items:
+            return {
+                "message": "No items need reordering at this time",
+                "store_id": store_id,
+                "items_checked": len(inventory_data)
+            }
+
+        # Generate PO with the items
+        po_request = PurchaseOrderRequest(
+            store_id=store_id,
+            supplier=supplier,
+            items=items,
+            notes=notes or "Auto-generiert basierend auf Lagerbestandsempfehlungen"
+        )
+
+        return await generate_purchase_order(po_request)
+
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"❌ Error in auto-generate: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error loading data: {str(e)}")
     
     # Determine likely column names (robust to different mock file formats)
