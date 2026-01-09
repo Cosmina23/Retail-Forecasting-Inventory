@@ -14,7 +14,6 @@ app = FastAPI(
     title="Retail Forecasting & Inventory API",
     description="Backend API for retail forecasting and inventory management",
     version="1.0.0",
-    redirect_slashes=False  # This prevents automatic slash redirects that break POST
 )
 
 # Force reload
@@ -64,7 +63,6 @@ app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecas
 app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
 #varianta flavia-> app.include_router(inventory.router, prefix="/api/data/inventory", tags=["Inventory"])
 app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=["Purchase Orders"])
-app.include_router(chat_router, prefix="/api", tags=["Chat"])
 
 @app.on_event("startup")
 def startup_event():

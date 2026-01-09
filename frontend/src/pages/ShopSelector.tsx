@@ -1,9 +1,20 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Store, Plus, TrendingUp, LogOut, Settings } from "lucide-react";
+import { Store, Plus, TrendingUp, LogOut, Settings, Loader2 } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
+import { NewStoreDialog } from "@/components/NewStoreDialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 
 
 const ShopSelector = () => {
@@ -11,6 +22,10 @@ const ShopSelector = () => {
   const { toast } = useToast();
   const [shops, setShops] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isNewStoreDialogOpen, setIsNewStoreDialogOpen] = useState(false);
+  const [storeToDelete, setStoreToDelete] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchShops();
@@ -18,10 +33,12 @@ const ShopSelector = () => {
 
   const fetchShops = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await apiService.getMyStores();
       setShops(data);
     } catch (error: any) {
+      setError(error?.message || String(error));
       toast({
         variant: "destructive",
         title: "Failed to load stores",
@@ -29,6 +46,26 @@ const ShopSelector = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStoreCreated = () => {
+    setIsNewStoreDialogOpen(false);
+    fetchShops();
+    toast({ title: "Store created", description: "Store was created successfully." });
+  };
+
+  const handleDeleteStore = async (store: any) => {
+    setIsDeleting(true);
+    try {
+      await apiService.deleteStore(store.id);
+      setStoreToDelete(null);
+      fetchShops();
+      toast({ title: "Store deleted", description: "Store was deleted successfully." });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Delete failed", description: err?.message || String(err) });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
