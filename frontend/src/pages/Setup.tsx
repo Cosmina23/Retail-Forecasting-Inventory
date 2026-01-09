@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet, Loader2 } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
-import { debug } from "console";
+// Removed Node's console import which breaks in browser
 
 const Setup = () => {
   const navigate = useNavigate();
@@ -16,14 +16,17 @@ const Setup = () => {
   const [storeId, setStoreId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedSaleFile, setUploadedSaleFile] = useState<File|null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const steps = [
     { number: 1, title: "Store Details", icon: Store },
-    { number: 2, title: "Import Data", icon: Upload },
-    { number: 3, title: "Complete", icon: CheckCircle2 },
+    { number: 2, title: "Import Inventory", icon: Upload },
+    {number: 3, title:"Import Sales", icon: Upload},
+    { number: 4, title: "Complete", icon: CheckCircle2 },
   ];
 
+  // Inventory Drag and Drop
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -78,6 +81,64 @@ const Setup = () => {
       setIsUploading(false);
     }
   };
+
+  // Sales Drag and Upload
+  const handleSalesDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+      setUploadedSaleFile(file);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Invalid file type",
+        description: "Please upload an Excel file (.xlsx or .xls)",
+      });
+    }
+  };
+
+  const handleFileSalesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadedSaleFile(file);
+    }
+  };
+  
+   const handleUploadSalesToBackend = async () => {
+    if (!uploadedSaleFile || !storeId) {
+      toast({
+        variant: "destructive",
+        title: "Missing Store",
+        description: "Please create a store before importing sales.",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Optionally, you can pass storeId to the backend if your import endpoint supports it
+      const store_id = localStorage.getItem('store_id');
+      const result = await apiService.importSales(uploadedSaleFile,store_id);
+      const imported = result.inserted_or_updated ?? result.inserted_count ?? 0;
+      const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
+      toast({
+        title: "Success!",
+        description: `Imported ${imported} sales successfully${errorCount ? `, ${errorCount} rows had issues` : ""}`,
+      });
+      setCurrentStep(4);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: error.message || "Could not upload file",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+
 
   const renderStepContent = () => {
     switch (currentStep) {
@@ -194,7 +255,70 @@ const Setup = () => {
             </p>
           </div>
         );
-      case 3:
+        case 3:
+        return (
+          <div className="space-y-4 animate-fade-up">
+            <div
+              className={`border-2 border-dashed rounded-xl p-10 text-center transition-all duration-200 ${
+                isDragging
+                  ? "border-primary bg-accent"
+                  : uploadedSaleFile
+                  ? "border-success bg-success/5"
+                  : "border-border hover:border-primary/50 hover:bg-accent/50"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleSalesDrop}
+            >
+              {uploadedSaleFile ? (
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto">
+                    <FileSpreadsheet className="w-6 h-6 text-success" />
+                  </div>
+                  <p className="font-medium text-foreground">{uploadedSaleFile.name}</p>
+                  <p className="text-sm text-muted-foreground">File ready to upload</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUploadedSaleFile(null)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center mx-auto">
+                    <Upload className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Drag and drop Excel file here</p>
+                    <p className="text-sm text-muted-foreground">or click to browse</p>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleFileSalesSelect}
+                    className="hidden"
+                    id="sales-file-upload"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById("sales-file-upload")?.click()}
+                  >
+                    Select File
+                  </Button>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Supported formats: .xlsx, .xls, .csv
+            </p>
+          </div>
+        );
+      case 4:
         return (
           <div className="text-center space-y-6 animate-fade-up">
             <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto">
@@ -269,7 +393,7 @@ const Setup = () => {
           {/* Card */}
           <div className="bg-card rounded-xl border shadow-card p-8">
             <div className="mb-6">
-              <p className="text-sm text-muted-foreground">Step {currentStep} of 3</p>
+              <p className="text-sm text-muted-foreground">Step {currentStep} of {steps.length}</p>
               <h2 className="text-xl font-semibold text-foreground">{steps[currentStep - 1].title}</h2>
             </div>
 
@@ -277,24 +401,36 @@ const Setup = () => {
 
             {/* Navigation */}
             <div className="flex justify-between mt-8 pt-6 border-t">
-              {currentStep > 1 && currentStep < 3 ? (
+              {currentStep > 1 && currentStep < 4 ? (
                 <Button variant="ghost" onClick={() => setCurrentStep(currentStep - 1)}>
                   <ArrowLeft className="w-4 h-4 mr-2" /> Back
                 </Button>
               ) : (
                 <div />
               )}
-              {currentStep < 3 ? (
-                <Button 
-                  variant="hero" 
+              {currentStep < 4 ? (
+                <Button
+                  variant="hero"
                   onClick={() => {
-                    if (currentStep === 2 && uploadedFile) {
-                      handleUploadToBackend();
-                    } else {
-                      setCurrentStep(currentStep + 1);
+                    if (currentStep === 2) {
+                      if (uploadedFile) {
+                        handleUploadToBackend();
+                      }
+                      return;
                     }
+                    if (currentStep === 3) {
+                      if (uploadedSaleFile) {
+                        handleUploadSalesToBackend();
+                      }
+                      return;
+                    }
+                    setCurrentStep(currentStep + 1);
                   }}
-                  disabled={isUploading || (currentStep === 2 && !uploadedFile)}
+                  disabled={
+                    isUploading ||
+                    (currentStep === 2 && !uploadedFile) ||
+                    (currentStep === 3 && !uploadedSaleFile)
+                  }
                 >
                   {isUploading ? (
                     <>
@@ -303,7 +439,7 @@ const Setup = () => {
                     </>
                   ) : (
                     <>
-                      {currentStep === 2 ? 'Upload & Continue' : 'Continue'}
+                      {(currentStep === 2 || currentStep === 3) ? 'Upload & Continue' : 'Continue'}
                       <ArrowRight className="w-4 h-4 ml-2" />
                     </>
                   )}

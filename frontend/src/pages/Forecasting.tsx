@@ -45,13 +45,17 @@ const Forecasting = () => {
 
   const loadStores = async () => {
     try {
-      const response = await apiService.getAvailableStores();
-      setStores(response.stores);
-      if (response.stores.length > 0) {
+      const response = await apiService.getMyStores();
+      if (response?.stores?.length > 0) {
+        setStores(response.stores);
         setSelectedStore(response.stores[0].id.toString());
+      } else {
+        setStores([]);
+        toast.error("No stores available. Please add a store.");
       }
     } catch (error) {
       console.error("Failed to load stores:", error);
+      setStores([]); // Ensure stores is always an array
       toast.error("Failed to load stores");
     }
   };
@@ -64,11 +68,15 @@ const Forecasting = () => {
 
     setLoading(true);
     try {
+      // Include product_id in the request body
+      const productId = "default-product-id"; // Replace with actual product selection logic
       const response = await apiService.getForecast(selectedStore, forecastDays);
       setForecastData(response);
       toast.success("Forecast generated successfully");
     } catch (error: any) {
       console.error("Failed to generate forecast:", error);
+      // Improve error logging in handleForecast
+      console.error("API Error Response:", JSON.stringify(error, null, 2));
       toast.error(error.message || "Failed to generate forecast");
     } finally {
       setLoading(false);
@@ -99,83 +107,97 @@ const Forecasting = () => {
   };
 
   // Prepare chart data
-  const chartData = forecastData ?
-    forecastData.products[0]?.dates.map((date, idx) => ({
-      date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      ...Object.fromEntries(
-        forecastData.products.map(p => [p.product, p.daily_forecast[idx] || 0])
-      )
-    })) : [];
+  const chartData = forecastData?.products?.[0]?.dates?.map((date, idx) => ({
+    date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    ...Object.fromEntries(
+      forecastData.products.map(p => [p.product, p.daily_forecast[idx] || 0])
+    )
+  })) || [];
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header & Controls */}
-        <Card className="animate-fade-up">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-              <Target className="w-5 h-5 text-primary" />
-              Sales Forecasting & Inventory Recommendations
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                  Select Store
-                </label>
-                <Select value={selectedStore} onValueChange={setSelectedStore}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a store" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((store) => (
-                      <SelectItem key={store.id} value={store.id.toString()}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Render only if stores are loaded */}
+        {stores.length > 0 ? (
+          <Card className="animate-fade-up">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <Target className="w-5 h-5 text-primary" />
+                Sales Forecasting & Inventory Recommendations
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Store Selection */}
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                    Select Store
+                  </label>
+                  <Select value={selectedStore} onValueChange={setSelectedStore}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a store" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((store) => (
+                        <SelectItem key={store.id} value={store.id.toString()}>
+                          {store.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                  Forecast Period
-                </label>
-                <Select value={forecastDays.toString()} onValueChange={(v) => setForecastDays(Number(v))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7">7 Days</SelectItem>
-                    <SelectItem value="14">14 Days</SelectItem>
-                    <SelectItem value="30">30 Days</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                    Forecast Period
+                  </label>
+                  <Select value={forecastDays.toString()} onValueChange={(v) => setForecastDays(Number(v))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">7 Days</SelectItem>
+                      <SelectItem value="14">14 Days</SelectItem>
+                      <SelectItem value="30">30 Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="flex items-end">
-                <Button
-                  onClick={handleForecast}
-                  disabled={loading || !selectedStore}
-                  className="w-full"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <TrendingUp className="w-4 h-4 mr-2" />
-                      Generate Forecast
-                    </>
-                  )}
-                </Button>
+                <div className="flex items-end">
+                  <Button
+                    onClick={handleForecast}
+                    disabled={loading || !selectedStore}
+                    className="w-full"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="w-4 h-4 mr-2" />
+                        Generate Forecast
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="animate-fade-up">
+            <CardContent className="p-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-accent mx-auto mb-4 flex items-center justify-center">
+                <Target className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">No Stores Available</h3>
+              <p className="text-muted-foreground mb-6">
+                Please add a store to generate forecasts.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {forecastData && (
           <>

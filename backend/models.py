@@ -134,16 +134,24 @@ class Sale(BaseModel):
 # ---------------------- Forecasts -----------------------------
 class ForecastRequest(BaseModel):
     product_id: str
-    days: int = 30
+    days: int = 7
     store_id: Optional[str] = None
 
-
+class ProductForecast(BaseModel):
+    product: str
+    category: str
+    daily_forecast: List[float]
+    total_forecast: float
+    current_stock: int
+    recommended_order: int
+    dates: List[str]
+    
 class ForecastResponse(BaseModel):
-    product_id: str
-    store_id: Optional[str] = None
-    forecast_data: List[dict]
-    accuracy_score: Optional[float] = None
-    generated_at: datetime
+    store_id: str
+    forecast_period: str
+    products: List[ProductForecast]
+    total_revenue_forecast: float
+
 
 
 # ---------------------- Purchase Orders -----------------------

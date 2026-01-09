@@ -19,8 +19,46 @@ class ApiService {
 
   // ...existing code...
   // Sales endpoints
-  async getSales(skip = 0, limit = 100, days = 30) {
-    const params = new URLSearchParams({ skip: String(skip), limit: String(limit), days: String(days) });
+
+  async importSales(file: File, store_id: string) {
+    if (!store_id) {
+      throw new Error('No store selected');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('store_id', store_id);
+
+    const url = `${this.baseUrl}/api/sales/import`;
+    const token = this.getToken();
+
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.clearToken();
+        window.location.href = '/login';
+      }
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || 'Upload failed');
+    }
+
+    return await response.json();
+  }
+  async getSales(skip = 0, limit = 100, days?: number) {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (days !== undefined) {
+      params.append('days', String(days));
+    }
     return this.request(`/api/sales/?${params.toString()}`);
   }
 
@@ -270,6 +308,8 @@ class ApiService {
 
     return await response.json();
   }
+
+  
    // Stores endpoints
   async createStore(store: { name: string; market: string; address?: string }) {
     return this.request('/api/stores/', {
@@ -279,7 +319,10 @@ class ApiService {
   }
 
   async getMyStores() {
-    return this.request('/api/stores/me');
+   const res = await this.request('/api/stores/me');
+    // Backend returns an array of stores; normalize to { stores: [...] }
+    if (Array.isArray(res)) return { stores: res };
+    return { stores: res?.stores ?? [] };
   }
 
   async getStore(storeId: string) {
