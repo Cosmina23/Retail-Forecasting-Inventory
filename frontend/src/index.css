@@ -5,49 +5,76 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @layer base {
      :root {
-        --background: 210 20% 98%;
-        --foreground: 214 32% 15%;
+        /* Background - gradient modern cu albastru și violet */
+        --background: 220 60% 94%;
+        --foreground: 222 47% 11%;
+        
+        /* Carduri - albe clare cu efect glassmorphism */
         --card: 0 0% 100%;
-        --card-foreground: 214 32% 15%;
+        --card-foreground: 222 47% 11%;
+        
+        /* Popover-uri */
         --popover: 0 0% 100%;
-        --popover-foreground: 214 32% 15%;
-        --primary: 214 100% 40%;
+        --popover-foreground: 222 47% 11%;
+        
+        /* Primary - albastru electric vibrant */
+        --primary: 217 91% 55%;
         --primary-foreground: 0 0% 100%;
-        --secondary: 214 15% 93%;
-        --secondary-foreground: 214 32% 25%;
-        --muted: 210 15% 95%;
-        --muted-foreground: 214 15% 45%;
-        --accent: 214 80% 95%;
-        --accent-foreground: 214 100% 35%;
-        --destructive: 0 72% 51%;
+        
+        /* Secondary - lavanda soft pentru contrast elegant */
+        --secondary: 240 50% 94%;
+        --secondary-foreground: 222 47% 11%;
+        
+        /* Muted - gri-albastru pentru text secundar */
+        --muted: 220 35% 88%;
+        --muted-foreground: 220 15% 35%;
+        
+        /* Accent - albastru cerulean pentru hover */
+        --accent: 205 100% 88%;
+        --accent-foreground: 217 91% 40%;
+        
+        /* Destructive - roșu coral vibrant */
+        --destructive: 0 90% 60%;
         --destructive-foreground: 0 0% 100%;
-        --success: 142 71% 45%;
+        
+        /* Success - verde smarald vibrant */
+        --success: 158 64% 52%;
         --success-foreground: 0 0% 100%;
-        --warning: 38 92% 50%;
+        
+        /* Warning - portocaliu mango intens */
+        --warning: 35 100% 60%;
         --warning-foreground: 0 0% 100%;
-        --border: 214 20% 88%;
-        --input: 214 20% 88%;
-        --ring: 214 100% 40%;
-        --radius: 0.5rem;
-        --chart-1: 214 100% 40%;
-        --chart-2: 142 71% 45%;
-        --chart-3: 38 92% 50%;
-        --chart-4: 262 83% 58%;
-        --chart-5: 340 75% 55%;
-        --sidebar-background: 0 0% 100%;
-        --sidebar-foreground: 214 32% 15%;
-        --sidebar-primary: 214 100% 40%;
+        
+        /* Border-uri - albastru-gri subtil dar vizibil */
+        --border: 220 30% 82%;
+        --input: 220 30% 82%;
+        --ring: 217 91% 55%;
+        --radius: 0.75rem;
+        
+        /* Chart colors - paletă rainbow vibranta */
+        --chart-1: 217 91% 55%;  /* Albastru electric */
+        --chart-2: 158 64% 52%;  /* Verde smarald */
+        --chart-3: 35 100% 60%;  /* Portocaliu mango */
+        --chart-4: 280 85% 65%;  /* Mov neon */
+        --chart-5: 340 90% 65%;  /* Roz flamingo */
+        
+        /* Sidebar - fundal gradient subtil */
+        --sidebar-background: 220 40% 98%;
+        --sidebar-foreground: 222 47% 11%;
+        --sidebar-primary: 217 91% 55%;
         --sidebar-primary-foreground: 0 0% 100%;
-        --sidebar-accent: 214 80% 95%;
-        --sidebar-accent-foreground: 214 100% 35%;
-        --sidebar-border: 214 20% 90%;
-        --sidebar-ring: 214 100% 40%;
-        /* Custom tokens */
-        --gradient-primary: linear-gradient(135deg, hsl(214 100% 40%), hsl(214 100% 50%));
-        --gradient-hero: linear-gradient(135deg, hsl(214 100% 35%), hsl(230 80% 45%));
-        --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-        --shadow-card-hover: 0 10px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-        --shadow-elevated: 0 20px 40px -10px rgb(0 82 204 / 0.2);
+        --sidebar-accent: 205 100% 88%;
+        --sidebar-accent-foreground: 217 91% 40%;
+        --sidebar-border: 220 30% 86%;
+        --sidebar-ring: 217 91% 55%;
+        
+        /* Custom tokens - gradiente spectaculoase */
+        --gradient-primary: linear-gradient(135deg, hsl(217 91% 55%) 0%, hsl(217 91% 65%) 100%);
+        --gradient-hero: linear-gradient(135deg, hsl(240 100% 60%) 0%, hsl(217 91% 55%) 50%, hsl(200 100% 60%) 100%);
+        --gradient-background: linear-gradient(180deg, hsl(220 60% 96%) 0%, hsl(220 60% 94%) 100%);
+        --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-card-hover: 0 20px 25px -5px rgb(59 130 246 / 0.2), 0 8px 10px -6px rgb(59 130 246 / 0.15);
+        --shadow-elevated: 0 25px 50px -12px rgb(59 130 246 / 0.35);
     }
 }
 
@@ -56,24 +83,49 @@
         @apply border-border;
     }
     body {
-        @apply bg-background text-foreground font-sans antialiased;
+        @apply text-foreground font-sans antialiased;
         font-family: 'Inter', system-ui, sans-serif;
+        background: linear-gradient(135deg, 
+            hsl(220 60% 96%) 0%, 
+            hsl(230 70% 94%) 25%,
+            hsl(220 60% 95%) 50%,
+            hsl(210 60% 96%) 75%,
+            hsl(220 60% 96%) 100%);
+        background-attachment: fixed;
+        min-height: 100vh;
     }
 }
 
 @layer utilities {
     .card-hover {
         @apply transition-all duration-300 ease-out;
+        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.5);
     }
     .card-hover:hover {
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-card-hover);
+        transform: translateY(-6px);
+        box-shadow: 0 20px 40px -8px rgba(59, 130, 246, 0.25), 
+                    0 10px 20px -8px rgba(59, 130, 246, 0.15);
+        background: rgba(255, 255, 255, 1);
     }
     .gradient-primary {
-        background: var(--gradient-primary);
+        background: linear-gradient(135deg, hsl(217 91% 55%) 0%, hsl(217 91% 65%) 100%);
     }
     .gradient-hero {
-        background: var(--gradient-hero);
+        background: linear-gradient(135deg, 
+            hsl(240 100% 60%) 0%, 
+            hsl(217 91% 55%) 50%, 
+            hsl(200 100% 60%) 100%);
+    }
+    .gradient-success {
+        background: linear-gradient(135deg, hsl(158 64% 52%) 0%, hsl(158 64% 62%) 100%);
+    }
+    .gradient-warning {
+        background: linear-gradient(135deg, hsl(35 100% 60%) 0%, hsl(35 100% 70%) 100%);
+    }
+    .gradient-purple {
+        background: linear-gradient(135deg, hsl(280 85% 65%) 0%, hsl(280 85% 75%) 100%);
     }
     .animate-fade-up {
         animation: fadeUp 0.5s ease-out forwards;
