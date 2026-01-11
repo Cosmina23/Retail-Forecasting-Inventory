@@ -1,29 +1,82 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from database import db
 from bson import ObjectId
+from bson.errors import InvalidId
 from typing import List, Optional
 from datetime import datetime, timedelta
+from utils.auth import get_current_user
 
-router = APIRouter(prefix="/activity", tags=["activity"])
+router = APIRouter()  # Remove prefix from here
 
 activity_collection = db["activity"]
 sales_collection = db["sales"]
 inventory_collection = db["inventory"]
 products_collection = db["products"]
+stores_collection = db["stores"]
 
-@router.get("/")
-async def get_activity(store_id: Optional[str] = Query(None)):
-    """Get recent activity for a specific store"""
-    query = {"store_id": store_id} if store_id else {}
+def verify_store_ownership(store_id: str, current_user: Optional[dict]) -> tuple[bool, Optional[str]]:
+    """Verify that the store belongs to the current user
+    Returns: (is_owner, actual_store_id_for_query)
+    """
+    if not current_user:
+        return False, None
+
+    try:
+        # Try to find store by _id (ObjectId)
+        object_id = ObjectId(store_id)
+        store = stores_collection.find_one({"_id": object_id})
+    except (InvalidId, Exception):
+        # If not valid ObjectId, try store_id field
+        store = stores_collection.find_one({"store_id": store_id})
+
+    if not store:
+        return False, None
+
+    # Check ownership
+    is_owner = store.get("user_id") == current_user["_id"]
+
+    # Return the actual _id as string for querying
+    actual_store_id = str(store["_id"])
+
+    return is_owner, actual_store_id
+
+@router.get("/activity")
+async def get_activity(
+    store_id: Optional[str] = Query(None),
+    current_user: Optional[dict] = Depends(get_current_user)
+):
+    """Get recent activity for a specific store (only if user owns the store)"""
+    if not store_id:
+        return []
+
+    # Verify store ownership and get actual store_id for querying
+    is_owner, actual_store_id = verify_store_ownership(store_id, current_user)
+    if not is_owner or not actual_store_id:
+        return []
+
+    query = {"store_id": actual_store_id}
 
     # Try to get real activity from DB
-    activities = list(activity_collection.find(query).sort("date", -1).limit(10))
+    activities = list(activity_collection.find(query).sort("date", -1).limit(100))
 
     if activities:
         activity_data = []
         for activity in activities:
+            # Format date properly
+            date_value = activity.get("date", datetime.utcnow())
+            if isinstance(date_value, datetime):
+                date_str = date_value.strftime("%b %d, %Y")
+            elif isinstance(date_value, str):
+                try:
+                    date_obj = datetime.fromisoformat(date_value)
+                    date_str = date_obj.strftime("%b %d, %Y")
+                except:
+                    date_str = date_value
+            else:
+                date_str = datetime.utcnow().strftime("%b %d, %Y")
+
             activity_data.append({
-                "date": activity.get("date", datetime.utcnow().strftime("%b %d, %Y")),
+                "date": date_str,
                 "type": activity.get("type", "sale"),
                 "description": activity.get("description", "Activity"),
                 "value": activity.get("value", "€0"),
@@ -92,7 +145,7 @@ async def get_activity(store_id: Optional[str] = Query(None)):
     if recent_activity:
         return recent_activity[:6]
 
-    # Return empty array - NO MOCK DATA
+    # Return empty array
     return []
 
 @router.post("/")

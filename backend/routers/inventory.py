@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import pandas as pd
@@ -6,8 +6,13 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
 from database import db, sales_collection, inventory_collection
+from utils.auth import get_current_user
+from bson import ObjectId
+from bson.errors import InvalidId
 
 router = APIRouter()
+
+stores_collection = db["stores"]
 
 
 class InventoryMetrics(BaseModel):
@@ -273,20 +278,81 @@ async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_lev
 
 
 @router.get("/stores")
-async def get_stores_for_inventory():
+async def get_stores_for_inventory(current_user: Optional[dict] = Depends(get_current_user)):
     """
-    Get list of stores available for inventory optimization
+    Get list of stores available for inventory optimization (only user's stores)
     """
     try:
-        MOCK_DATA_DIR = Path(__file__).parent.parent / "mock_data"
-        sales_history_path = MOCK_DATA_DIR / "sales_history.csv"
+        stores_collection = db["stores"]
 
-        if not sales_history_path.exists():
+        # Return empty list if user is not authenticated
+        if not current_user:
             return {"stores": []}
 
-        sales_history = pd.read_csv(sales_history_path)
-        stores = sales_history["store_id"].unique().tolist()
+        # Filter by user_id for authenticated users
+        query = {"user_id": current_user["_id"]}
 
-        return {"stores": [{"id": int(s), "name": f"Store {s}"} for s in stores]}
+        stores = list(stores_collection.find(query, {"_id": 1, "name": 1, "store_id": 1}))
+
+        result = []
+        for store in stores:
+            store_id = store.get("store_id") or str(store.get("_id"))
+            result.append({
+                "id": store_id,
+                "name": store.get("name", f"Store {store_id}")
+            })
+
+        return {"stores": result}
     except Exception as e:
+        print(f"❌ Error getting stores: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/")
+async def get_inventory(store_id: Optional[str] = None, current_user: Optional[dict] = Depends(get_current_user)):
+    """
+    Get inventory for a specific store (only if user owns the store)
+    """
+    try:
+        if not store_id:
+            return []
+
+        # Find the store by _id
+        try:
+            object_id = ObjectId(store_id)
+            store = stores_collection.find_one({"_id": object_id})
+        except (InvalidId, Exception):
+            # Try by store_id field as fallback
+            store = stores_collection.find_one({"store_id": store_id})
+
+        if not store:
+            return []
+
+        # Verify store ownership
+        if current_user:
+            if store.get("user_id") != current_user["_id"]:
+                return []
+
+        # Use the actual _id string for querying inventory
+        actual_store_id = str(store["_id"])
+        query = {"store_id": actual_store_id}
+        inventory_items = list(inventory_collection.find(query))
+
+        result = []
+        for item in inventory_items:
+            result.append({
+                "id": str(item.get("_id")),
+                "product": item.get("product", "Unknown"),
+                "category": item.get("category", "Other"),
+                "stock_quantity": item.get("stock_quantity", 0),
+                "quantity": item.get("stock_quantity", 0),  # For compatibility
+                "reorder_level": item.get("reorder_level", 0),
+                "price": item.get("price", 0),
+                "store_id": item.get("store_id"),
+                "last_updated": item.get("last_updated", datetime.utcnow().isoformat())
+            })
+
+        return result
+    except Exception as e:
+        print(f"❌ Error getting inventory: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -219,6 +219,25 @@ class ApiService {
       method: 'POST',
     });
   }
+
+  // Notifications endpoints
+  async getNotifications(storeId?: string) {
+    const params = storeId ? `?store_id=${storeId}` : '';
+    return this.request(`/api/notifications${params}`);
+  }
+
+  async markNotificationRead(notificationId: string) {
+    return this.request(`/api/notifications/${notificationId}/read`, {
+      method: 'POST',
+    });
+  }
+
+  async markAllNotificationsRead(storeId?: string) {
+    const params = storeId ? `?store_id=${storeId}` : '';
+    return this.request(`/api/notifications/read-all${params}`, {
+      method: 'POST',
+    });
+  }
 }
 
 export const apiService = new ApiService();

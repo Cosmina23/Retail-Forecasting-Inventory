@@ -1,22 +1,60 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from database import db
 from bson import ObjectId
+from bson.errors import InvalidId
 from typing import List, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
+from utils.auth import get_current_user
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
 sales_collection = db["sales"]
 products_collection = db["products"]
 inventory_collection = db["inventory"]
+stores_collection = db["stores"]
+
+def verify_store_ownership(store_id: str, current_user: Optional[dict]) -> tuple[bool, Optional[str]]:
+    """Verify that the store belongs to the current user
+    Returns: (is_owner, actual_store_id_for_query)
+    """
+    if not current_user:
+        return False, None
+
+    try:
+        # Try to find store by _id (ObjectId)
+        object_id = ObjectId(store_id)
+        store = stores_collection.find_one({"_id": object_id})
+    except (InvalidId, Exception):
+        # If not valid ObjectId, try store_id field
+        store = stores_collection.find_one({"store_id": store_id})
+
+    if not store:
+        return False, None
+
+    # Check ownership
+    is_owner = store.get("user_id") == current_user["_id"]
+
+    # Return the actual _id as string for querying sales
+    actual_store_id = str(store["_id"])
+
+    return is_owner, actual_store_id
 
 @router.get("/")
-async def get_sales(store_id: Optional[str] = Query(None)):
-    """Get sales for a specific store"""
-    query = {}
-    if store_id:
-        query["store_id"] = store_id
+async def get_sales(
+    store_id: Optional[str] = Query(None),
+    current_user: Optional[dict] = Depends(get_current_user)
+):
+    """Get sales for a specific store (only if user owns the store)"""
+    if not store_id:
+        return []
+
+    # Verify store ownership and get actual store_id for querying
+    is_owner, actual_store_id = verify_store_ownership(store_id, current_user)
+    if not is_owner or not actual_store_id:
+        return []
+
+    query = {"store_id": actual_store_id}
 
     sales = []
     for sale in sales_collection.find(query).sort("date", -1).limit(100):
@@ -26,9 +64,20 @@ async def get_sales(store_id: Optional[str] = Query(None)):
     return sales
 
 @router.get("/monthly")
-async def get_monthly_sales(store_id: Optional[str] = Query(None)):
-    """Get monthly revenue trend for a specific store"""
-    query = {"store_id": store_id} if store_id else {}
+async def get_monthly_sales(
+    store_id: Optional[str] = Query(None),
+    current_user: Optional[dict] = Depends(get_current_user)
+):
+    """Get monthly revenue trend for a specific store (only if user owns the store)"""
+    if not store_id:
+        return []
+
+    # Verify store ownership and get actual store_id for querying
+    is_owner, actual_store_id = verify_store_ownership(store_id, current_user)
+    if not is_owner or not actual_store_id:
+        return []
+
+    query = {"store_id": actual_store_id}
 
     # Get sales from the last 6 months
     six_months_ago = datetime.utcnow() - timedelta(days=180)
@@ -71,7 +120,7 @@ async def get_monthly_sales(store_id: Optional[str] = Query(None)):
         if any(m["revenue"] > 0 for m in months):
             return months
 
-    # Return empty array - NO MOCK DATA
+    # Return empty array
     return []
 
 @router.post("/")

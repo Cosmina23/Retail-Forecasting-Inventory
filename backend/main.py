@@ -11,7 +11,7 @@ app = FastAPI(
     title="Retail Forecasting & Inventory API",
     description="Backend API for retail forecasting and inventory management",
     version="1.0.0",
-    redirect_slashes=False  # This prevents automatic slash redirects that break POST
+    redirect_slashes=True  # This prevents automatic slash redirects that break POST
 )
 
 # Force reload
@@ -41,18 +41,19 @@ async def health_check():
     return {"status": "healthy"}
 
 # Import routers
-from routers import auth, products, stores, inventory, sales, forecasts, activity, forecasting, purchase_orders
+from routers import auth, products, stores, inventory, sales, forecasts, activity, forecasting, purchase_orders, notifications
 from services.chat import router as chat_router
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(stores.router, prefix="/api", tags=["Stores"])
-app.include_router(inventory.router, prefix="/api", tags=["Inventory"])
-app.include_router(sales.router, prefix="/api", tags=["Sales"])
+app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
+app.include_router(sales.router, prefix="/api", tags=["Sales"])  # sales.router already has /sales prefix
 app.include_router(forecasts.router, prefix="/api", tags=["Forecasts"])
 app.include_router(activity.router, prefix="/api", tags=["Activity"])
 app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=["Purchase Orders"])
+app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
 app.include_router(chat_router, prefix="/api", tags=["Chat"])
 
 if __name__ == "__main__":
