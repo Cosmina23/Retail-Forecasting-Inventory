@@ -2,7 +2,7 @@ import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Package, ShoppingCart, Euro, AlertTriangle } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
-import { Chatbot} from '@/components/Chatbot';
+import { Chatbot } from '@/components/Chatbot';
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -48,7 +48,16 @@ const Dashboard = () => {
 
   useEffect(() => {
     const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
-    const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
+    let storeId = routeStoreId;
+
+    if (!storeId && sel) {
+      try {
+        const store = JSON.parse(sel);
+        storeId = store.store_id || store.id || store._id;
+      } catch {
+        storeId = null;
+      }
+    }
 
     if (!storeId) {
       setLoading(false);
@@ -63,70 +72,100 @@ const Dashboard = () => {
     setLoading(true);
     setError(null);
 
-    console.log('🔍 Fetching data for store:', storeId);
-
     try {
       const base = "http://localhost:8000/api";
 
-      // Verificăm mai întâi că store-ul există
-      try {
-        console.log('📡 Checking if store exists...');
-        const storeRes = await fetch(`${base}/stores/${storeId}`);
-        if (!storeRes.ok) {
-          if (storeRes.status === 404) {
-            console.error('❌ Store not found');
-            setError(`Store with ID "${storeId}" not found. Please select a valid store.`);
-            setLoading(false);
-            return;
-          }
-          throw new Error(`Failed to fetch store: ${storeRes.statusText}`);
-        }
-        const storeData = await storeRes.json();
-        console.log('✅ Store found:', storeData);
-      } catch (e) {
-        console.error("❌ Store validation failed", e);
-        setError(`Unable to access store "${storeId}". The store may not exist or the server is unavailable.`);
+      // Get auth token and add to headers
+      const token = localStorage.getItem('access_token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // 1. Get store details first
+      const storeRes = await fetch(`${base}/stores/${storeId}`, { headers });
+      if (!storeRes.ok) {
+        setError(storeRes.status === 404 ? "Store not found." : "Failed to connect to server.");
         setLoading(false);
         return;
       }
 
+      const storeData = await storeRes.json();
+      console.log("🏪 Store data received:", storeData);
+
+      // Use the store's _id (which is returned as 'id') for all queries
+      const queryStoreId = storeData.id || storeId;
+      console.log("📍 Using ID for data queries:", queryStoreId);
+
+      // 2. Incarcare date
       let sales: SalePoint[] = [];
-      try {
-        console.log('📡 Fetching sales...');
-        const res = await fetch(`${base}/sales?store_id=${storeId}`);
-        if (res.ok) {
-          sales = await res.json();
-          console.log('✅ Sales loaded:', sales.length, 'items');
-        }
-      } catch (e) {
-        console.debug("⚠️ sales endpoint not available", e);
-      }
-
       let inventory: InventoryEntry[] = [];
-      try {
-        console.log('📡 Fetching inventory...');
-        const res = await fetch(`${base}/inventory?store_id=${storeId}`);
-        if (res.ok) {
-          inventory = await res.json();
-          console.log('✅ Inventory loaded:', inventory.length, 'items');
-        }
-      } catch (e) {
-        console.debug("⚠️ inventory endpoint not available", e);
-      }
-
       let metrics: any = null;
+
       try {
-        console.log('📡 Fetching metrics...');
-        const res = await fetch(`${base}/stores/${storeId}/metrics`);
-        if (res.ok) {
-          metrics = await res.json();
-          console.log('✅ Metrics loaded:', metrics);
+        const [sfRes, iRes, mRes] = await Promise.all([
+          fetch(`${base}/stores/${storeId}/sales-forecast`, { headers }),
+          fetch(`${base}/inventory?store_id=${queryStoreId}`, { headers }),
+          fetch(`${base}/stores/${storeId}/metrics`, { headers })
+        ]);
+
+        console.log("📊 Sales-Forecast Response:", sfRes.status, sfRes.statusText);
+        console.log("📦 Inventory Response:", iRes.status, iRes.statusText);
+        console.log("📈 Metrics Response:", mRes.status, mRes.statusText);
+
+        if (sfRes.ok) {
+          const salesForecastData = await sfRes.json();
+          console.log("📊 Sales-Forecast Data:", salesForecastData);
+          if (Array.isArray(salesForecastData) && salesForecastData.length > 0) {
+            sales = salesForecastData;
+          } else {
+            console.warn("⚠️ No sales-forecast data returned or empty array");
+          }
+        } else {
+          console.error("❌ Sales-Forecast API error:", sfRes.status, await sfRes.text());
+        }
+
+        if (iRes.ok) {
+          const rawInventory = await iRes.json();
+          console.log("📦 Inventory Data:", rawInventory);
+          // Transform inventory data for pie chart
+          if (Array.isArray(rawInventory) && rawInventory.length > 0) {
+            const categoryData = rawInventory.reduce((acc: any, item: any) => {
+              const category = item.category || 'Other';
+              if (!acc[category]) {
+                acc[category] = { name: category, value: 0 };
+              }
+              acc[category].value += item.stock_quantity || 0;
+              return acc;
+            }, {});
+
+            // Calculate total and convert to percentages
+            const total = Object.values(categoryData).reduce((sum: number, item: any) => sum + item.value, 0);
+            inventory = Object.values(categoryData).map((item: any, index: number) => ({
+              name: item.name,
+              value: Math.round((item.value / total) * 100),
+              color: `hsl(var(--chart-${(index % 5) + 1}))`
+            }));
+          } else {
+            console.warn("⚠️ No inventory data returned or empty array");
+          }
+        } else {
+          console.error("❌ Inventory API error:", await iRes.text());
+        }
+
+        if (mRes.ok) {
+          metrics = await mRes.json();
+          console.log("📈 Metrics Data:", metrics);
+        } else {
+          console.warn("⚠️ Metrics not available:", mRes.status, await mRes.text());
         }
       } catch (e) {
-        console.debug("⚠️ metrics endpoint optional", e);
+        console.error("❌ Error loading data:", e);
       }
 
-      console.log('📊 Setting up dashboard data...');
       setSalesData(sales.length ? sales : fallbackSales());
       setInventoryData(inventory.length ? inventory : fallbackInventory());
 
@@ -136,105 +175,77 @@ const Dashboard = () => {
         computedStats.push({
           label: "Daily Revenue",
           value: formatCurrency(metrics.daily_revenue ?? 0),
-          change: metrics.revenue_change ? `${metrics.revenue_change}` : "",
+          change: metrics.revenue_change ? `${metrics.revenue_change}%` : "",
           positive: (metrics.revenue_change || 0) >= 0,
           icon: Euro,
         });
-
         computedStats.push({
           label: "Orders",
           value: String(metrics.orders ?? 0),
-          change: metrics.orders_change ? `${metrics.orders_change}` : "",
+          change: metrics.orders_change ? `${metrics.orders_change}%` : "",
           positive: (metrics.orders_change || 0) >= 0,
           icon: ShoppingCart,
         });
-
         computedStats.push({
           label: "Stock Level",
           value: String(metrics.stock_level ?? 0),
-          change: metrics.stock_change ? `${metrics.stock_change}` : "",
-          positive: (metrics.stock_change || 0) >= 0,
+          change: metrics.stock_change ? `${metrics.stock_change}%` : "",
+          positive: true,
           icon: Package,
         });
-
         computedStats.push({
           label: "Critical Items",
           value: String(metrics.critical_items ?? 0),
-          change: metrics.critical_items_change ? `${metrics.critical_items_change}` : "",
+          change: metrics.critical_items_change ? `${metrics.critical_items_change}%` : "",
           positive: (metrics.critical_items_change || 0) <= 0,
           icon: AlertTriangle,
         });
       } else {
-        const orders = sales.length;
-        const stockLevel = inventory.reduce((acc, i) => acc + (i.quantity || 0), 0);
+        const revenue = sales.reduce((acc, s) => acc + (s.actual || 0), 0);
+        const stock = inventory.reduce((acc, i) => acc + (i.quantity || 0), 0);
         const critical = inventory.reduce((acc, i) => acc + ((i.quantity ?? 0) <= (i.reorder_level ?? 0) ? 1 : 0), 0);
-        const revenue = sales.reduce((acc, s) => acc + (typeof s.actual === 'number' ? s.actual : 0), 0);
 
-        computedStats.push({ label: "Daily Revenue", value: formatCurrency(revenue), change: "", positive: true, icon: Euro });
-        computedStats.push({ label: "Orders", value: String(orders), change: "", positive: true, icon: ShoppingCart });
-        computedStats.push({ label: "Stock Level", value: String(stockLevel), change: "", positive: true, icon: Package });
-        computedStats.push({ label: "Critical Items", value: String(critical), change: "", positive: critical === 0, icon: AlertTriangle });
+        computedStats.push({ label: "Daily Revenue", value: formatCurrency(revenue), icon: Euro, positive: true });
+        computedStats.push({ label: "Orders", value: String(sales.length), icon: ShoppingCart, positive: true });
+        computedStats.push({ label: "Stock Level", value: String(stock), icon: Package, positive: true });
+        computedStats.push({ label: "Critical Items", value: String(critical), icon: AlertTriangle, positive: critical === 0 });
       }
 
       setStats(computedStats);
     } catch (e) {
-      console.error("Failed to fetch dashboard data", e);
+      console.error("Dashboard Fetch Error:", e);
+      setError("Failed to load dashboard data.");
     } finally {
       setLoading(false);
     }
   };
 
-  const fallbackSales = (): SalePoint[] => {
-    return [
-      { date: "Day 1", forecast: 0, actual: 0 },
-      { date: "Day 2", forecast: 0, actual: 0 },
-      { date: "Day 3", forecast: 0, actual: 0 },
-    ];
-  };
+  const fallbackSales = (): SalePoint[] => [{ date: "No data", forecast: 0, actual: 0 }];
+  const fallbackInventory = (): InventoryEntry[] => [{ name: "No data", value: 100, color: "hsl(var(--chart-3))" }];
 
-  const fallbackInventory = (): InventoryEntry[] => {
-    return [
-      { name: "No data", value: 100, color: "hsl(var(--chart-3))" },
-    ];
-  };
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="min-h-screen flex items-center justify-center">Loading dashboard...</div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <DashboardLayout>
-        <div className="min-h-screen flex items-center justify-center">
-          <p className="text-center text-red-500">{error}</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  if (loading) return <DashboardLayout><div className="min-h-screen flex items-center justify-center">Loading...</div></DashboardLayout>;
+  if (error) return <DashboardLayout><div className="min-h-screen flex items-center justify-center text-red-500">{error}</div></DashboardLayout>;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Stats Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, index) => (
-            <Card key={stat.label} className="animate-fade-up" style={{ animationDelay: `${index * 0.05}s` }}>
+          {stats.map((stat) => (
+            <Card key={stat.label} className="animate-fade-up">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
                     <stat.icon className="w-5 h-5 text-primary" />
                   </div>
-                  <div className={`flex items-center gap-1 text-sm ${stat.positive ? "text-success" : "text-destructive"}`}>
-                    {stat.positive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    {stat.change}
-                  </div>
+                  {stat.change && (
+                    <div className={`flex items-center gap-1 text-sm ${stat.positive ? "text-success" : "text-destructive"}`}>
+                      {stat.positive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {stat.change}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-3">
-                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                  <p className="text-2xl font-bold">{stat.value}</p>
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
                 </div>
               </CardContent>
@@ -242,108 +253,38 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* Charts Row */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Area Chart */}
-          <Card className="lg:col-span-2 animate-fade-up" style={{ animationDelay: "0.2s" }}>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">Sales Forecast vs History</CardTitle>
-            </CardHeader>
+          <Card className="lg:col-span-2">
+            <CardHeader><CardTitle className="text-base font-semibold">Sales Forecast vs History</CardTitle></CardHeader>
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={salesData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis tickFormatter={(v) => `€${v / 1000}k`} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(value: number) => formatCurrency(value)}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="forecast"
-                      stroke="hsl(var(--chart-1))"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorForecast)"
-                      name="Forecast"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="actual"
-                      stroke="hsl(var(--chart-2))"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorActual)"
-                      name="Actual"
-                      connectNulls={false}
-                    />
+                  <AreaChart data={salesData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis tickFormatter={(v) => `€${v}`} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="forecast" stroke="hsl(var(--chart-1))" fillOpacity={0.1} fill="hsl(var(--chart-1))" name="Forecast" />
+                    <Area type="monotone" dataKey="actual" stroke="hsl(var(--chart-2))" fillOpacity={0.1} fill="hsl(var(--chart-2))" name="Actual" />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
-              <div className="flex items-center justify-center gap-6 mt-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "hsl(var(--chart-1))" }} />
-                  <span className="text-sm text-muted-foreground">Forecast</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "hsl(var(--chart-2))" }} />
-                  <span className="text-sm text-muted-foreground">Actual</span>
-                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Pie Chart */}
-          <Card className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
-            <CardHeader>
-              <CardTitle className="text-base font-semibold">Inventory Composition</CardTitle>
-            </CardHeader>
+          <Card>
+            <CardHeader><CardTitle className="text-base font-semibold">Inventory Composition</CardTitle></CardHeader>
             <CardContent>
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie
-                      data={inventoryData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      paddingAngle={4}
-                      dataKey="value"
-                    >
+                    <Pie data={inventoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={4} dataKey="value">
                       {inventoryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell key={`cell-${index}`} fill={entry.color || `hsl(var(--chart-${(index % 5) + 1}))`} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(value: number) => `${value}%`}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                      formatter={(value) => <span className="text-sm text-muted-foreground">{value}</span>}
-                    />
+                    <Tooltip />
+                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -357,3 +298,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

@@ -38,10 +38,21 @@ const History = () => {
 	const fetchHistory = async (storeId: string) => {
 		setLoading(true);
 		const base = "http://localhost:8000/api";
+
+		// Get auth token from localStorage
+		const token = localStorage.getItem("token");
+		const headers: HeadersInit = {
+			"Content-Type": "application/json"
+		};
+
+		if (token) {
+			headers["Authorization"] = `Bearer ${token}`;
+		}
+
 		try {
 			const [resMonthly, resActivity] = await Promise.all([
-				fetch(`${base}/sales/monthly?store_id=${storeId}`),
-				fetch(`${base}/activity?store_id=${storeId}`)
+				fetch(`${base}/sales/monthly?store_id=${storeId}`, { headers }),
+				fetch(`${base}/activity?store_id=${storeId}`, { headers })
 			]);
 
 			if (resMonthly.ok) {
@@ -285,4 +296,3 @@ const History = () => {
 };
 
 export default History;
-
