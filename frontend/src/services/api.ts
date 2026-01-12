@@ -65,7 +65,7 @@ class ApiService {
   async getSalesSummary(days = 30) {
     return this.request(`/api/sales/summary?days=${days}`);
   }
- 
+
 
   setToken(token: string) {
     this.token = token;
@@ -285,7 +285,7 @@ class ApiService {
 
     const url = `${this.baseUrl}/api/products/import`;
     const token = this.getToken();
-    
+
     const headers: HeadersInit = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -327,6 +327,25 @@ class ApiService {
 
   async getStore(storeId: string) {
     return this.request(`/api/stores/${storeId}`);
+  }
+
+  // Notifications endpoints
+  async getNotifications(storeId?: string) {
+    const params = storeId ? `?store_id=${storeId}` : '';
+    return this.request(`/api/notifications${params}`);
+  }
+
+  async markNotificationRead(notificationId: string) {
+    return this.request(`/api/notifications/${notificationId}/read`, {
+      method: 'POST',
+    });
+  }
+
+  async markAllNotificationsRead(storeId?: string) {
+    const params = storeId ? `?store_id=${storeId}` : '';
+    return this.request(`/api/notifications/read-all${params}`, {
+      method: 'POST',
+    });
   }
 }
 

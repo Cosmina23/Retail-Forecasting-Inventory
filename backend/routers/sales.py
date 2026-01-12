@@ -1,12 +1,14 @@
 import os
-from pathlib import Path
 import tempfile
 import uuid
-import pandas as pd
-from fastapi import APIRouter, Depends, Query, HTTPException, status, Form, UploadFile, File
+from fastapi import APIRouter, Depends, File, Form, Path, Query, HTTPException, UploadFile, status
 from typing import List, Optional
-from services.data_importer import import_products_from_csv, import_products_from_excel
+from backend.dal.products_repo import create_product, get_product_by_id
+from backend.routers.products import _normalize_import_doc
+from backend.services.data_importer import import_products_from_csv, import_products_from_excel
 from utils.auth import get_current_user
+
+# Repository (DAL)
 from dal.sales_repo import (
     list_sales,
     get_sales_summary,
@@ -14,7 +16,6 @@ from dal.sales_repo import (
     get_sales_by_product,
     create_sale as create_sale_record,
 )
-from dal.products_repo import get_product_by_id, create_product
 from database import db
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -25,117 +26,89 @@ sales_collection = db["sales"]
 products_collection = db["products"]
 inventory_collection = db["inventory"]
 
-def _normalize_import_doc(doc: dict) -> dict:
-    """Normalize raw import doc into a product payload."""
-    # Support both standard and Romanian column names
-    name = doc.get("name") or doc.get("Denumire")
-    sku = doc.get("sku")  # Still allow if present, but optional
-    product_id = doc.get("product_id")
-    quantity = doc.get("quantity") or doc.get("Cantitate")
-    total_amount = doc.get("total_amount") or doc.get("Valoare")
-    unit_price = doc.get("unit_price") or doc.get("Pret unitar") or doc.get("price_per_unit")
-    date = doc.get("date") or doc.get("Data")
-
-    if name is None or total_amount is None or date is None:
-        raise ValueError("Missing required fields: name/Denumire, total_amount/Valoare, date/Data")
-
-    try:
-        total_amount_val = float(str(total_amount).replace(",", "").replace(" ", ""))
-    except Exception:
-        raise ValueError(f"Invalid total_amount/Valoare for product {name}")
-
-    unit_price_val = None
-    if unit_price is not None:
-        try:
-            unit_price_val = float(str(unit_price).replace(",", "").replace(" ", ""))
-        except Exception:
-            unit_price_val = None
-
-    cost_val = None
-    if doc.get("cost") not in (None, "", "null", "None"):
-        try:
-            cost_val = float(doc.get("cost"))
-        except Exception:
-            raise ValueError(f"Invalid cost for product {name}")
-
-    store_ids_raw = doc.get("store_ids")
-    store_ids: List[str] = []
-    if isinstance(store_ids_raw, list):
-        store_ids = [str(s).strip() for s in store_ids_raw if str(s).strip()]
-    elif isinstance(store_ids_raw, str):
-        store_ids = [s.strip() for s in store_ids_raw.split(",") if s.strip()]
-    elif store_ids_raw not in (None, "", "null", "None"):
-        store_ids = [str(store_ids_raw).strip()]
-
-    # Optionally parse quantity and date if needed for inventory or audit
-    result = {
-        "name": name,
-        "sku": str(sku) if sku is not None else None,
-        "product_id": product_id,
-        "total_amount": total_amount_val,
-        "unit_price": unit_price_val,
-        "user_id": doc.get("user_id"),
-        "store_ids": store_ids,
-        "date": date,
-    }
-    if quantity is not None:
-        try:
-            result["quantity"] = float(str(quantity).replace(",", "").replace(" ", ""))
-        except Exception:
-            pass
-    return result
 
 @router.get("/", response_model=List[dict])
 async def get_sales(skip: int = 0, limit: int = 100, days: Optional[int] = None, current_user: str = Depends(get_current_user)):
     """Get all sales, optionally filter by days."""
-    print(f"GET /sales - skip={skip}, limit={limit}, days={days}")
-    result = list_sales(skip=skip, limit=limit, days=days)
-    print(f"list_sales returned {len(result)} sales")
-    if result:
-        print(f"First sale: {result[0]}")
-    return result
+    return list_sales(skip=skip, limit=limit, days=days)
 
 
 @router.get("/summary", response_model=dict)
-async def sales_summary(days: int = 30, current_user: str = Depends(get_current_user)):
-    """Get sales summary for the last N days."""
+async def sales_summary(days: int = 30, current_user: dict = Depends(get_current_user)):
+    """Obține sumarul vânzărilor pentru ultimele N zile."""
+    # În mod normal, aici s-ar adăuga o filtrare per user_id în DAL
     return get_sales_summary(days=days)
 
 
 @router.get("/monthly")
-async def get_monthly_sales(store_id: Optional[str] = Query(None)):
-    """Monthly revenue trend for last 6 months. Falls back to direct DB aggregation."""
-    query = {"store_id": store_id} if store_id else {}
+async def get_monthly_sales(
+        store_id: Optional[str] = Query(None),
+        current_user: dict = Depends(get_current_user)
+):
+    """Trendul veniturilor lunare pentru ultimele 6 luni."""
+    if not store_id:
+        raise HTTPException(status_code=400, detail="store_id is required")
+
+    is_owner, actual_id = verify_store_ownership(store_id, current_user)
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Agregare date
     six_months_ago = datetime.utcnow() - timedelta(days=180)
-    query["date"] = {"$gte": six_months_ago.isoformat()}
+    query = {
+        "store_id": actual_id,
+        "date": {"$gte": six_months_ago}  # Presupunem format BSON Date conform inventarului
+    }
 
     sales = list(sales_collection.find(query))
-
     monthly_revenue = defaultdict(float)
+
     for sale in sales:
         try:
-            sale_date = datetime.fromisoformat(sale.get("date", ""))
+            # Gestionăm atât obiecte datetime cât și string-uri ISO
+            d = sale.get("date")
+            sale_date = d if isinstance(d, datetime) else datetime.fromisoformat(str(d).replace('Z', '+00:00'))
+
             month_key = sale_date.strftime("%b")
-            quantity = sale.get("quantity", 0)
+
+            # Calculăm venitul
+            qty = sale.get("quantity", 0)
             price = sale.get("price", 0)
-            if not price and sale.get("product_id") and products_collection:
-                product = products_collection.find_one({"product_id": sale["product_id"]})
-                if product:
-                    price = product.get("price", 0)
-            monthly_revenue[month_key] += quantity * price
-        except Exception:
+
+            # Fallback preț din colecția de produse dacă lipsește în sale
+            if not price and sale.get("product_id"):
+                prod = products_collection.find_one({"_id": ObjectId(sale["product_id"])})
+                if prod:
+                    price = prod.get("price", 0)
+
+            monthly_revenue[month_key] += (qty * price)
+        except:
             continue
 
-    months = []
+    # Generăm lista pentru ultimele 6 luni (inclusiv cele cu 0)
+    result = []
     current_date = datetime.utcnow()
     for i in range(5, -1, -1):
-        month_date = current_date - timedelta(days=30 * i)
-        month_name = month_date.strftime("%b")
-        months.append({"month": month_name, "revenue": int(monthly_revenue.get(month_name, 0))})
+        target_date = current_date - timedelta(days=30 * i)
+        m_name = target_date.strftime("%b")
+        result.append({
+            "month": m_name,
+            "revenue": round(monthly_revenue.get(m_name, 0), 2)
+        })
 
-    if any(m["revenue"] > 0 for m in months):
-        return months
-    return []
+    return result
+
+@router.post("/")
+async def create_sale(sale: dict):
+    """Create a new sale record (legacy direct DB endpoint)."""
+    if "date" not in sale:
+        sale["date"] = datetime.utcnow()  # Salvăm ca BSON Date pentru interogări rapide
+    elif isinstance(sale["date"], str):
+        sale["date"] = datetime.fromisoformat(sale["date"].replace('Z', '+00:00'))
+
+    result = sales_collection.insert_one(sale)
+    sale["_id"] = str(result.inserted_id)
+    return sale
 
 @router.post("/import", status_code=status.HTTP_201_CREATED)
 async def import_sales_endpoint(
@@ -342,13 +315,3 @@ async def import_sales_endpoint(
 
 
         
-
-@router.post("/")
-async def create_sale_legacy(sale: dict):
-    """Create a new sale record (legacy direct DB endpoint)."""
-    if "date" not in sale:
-        sale["date"] = datetime.utcnow().isoformat()
-    result = sales_collection.insert_one(sale)
-    sale["_id"] = str(result.inserted_id)
-    return sale
-

@@ -30,11 +30,11 @@ const App = () => (
           <Route path="/index" element={<ShopSelector />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/:storeId" element={<Dashboard />} />
-          <Route path="/inventory" element={<Inventory />} />
-          <Route path="/forecasting" element={<Forecasting />} />
-          <Route path="/purchase-orders" element={<PurchaseOrders />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/sales" element={<Sales/>}/>
+          <Route path="/inventory/:storeId" element={<Inventory />} />
+          <Route path="/forecasting/:storeId" element={<Forecasting />} />
+          <Route path="/purchase-orders/:storeId" element={<PurchaseOrders />} />
+          <Route path="/history/:storeId" element={<History />} />
+          <Route path="/sales/:storeId" element={<Sales/>}/>
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

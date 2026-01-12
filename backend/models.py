@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, Optional, List, Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 # ---------------------- Users --------------------------------
@@ -48,9 +48,9 @@ class Store(BaseModel):
 
 
 class StoreCreate(BaseModel):
-    name: str
-    market: str
-    address: Optional[str] = None
+    name: str = Field(..., min_length=2, description="The unique name of the store")
+    market: str = Field(..., min_length=2, description="The industry or market type (e.g., Retail, Food, Electronics)")
+    address: str = Field(..., min_length=5, description="The full physical address of the store")
 
 
 # ---------------------- Products ------------------------------
