@@ -308,7 +308,7 @@ async def get_stores_for_inventory(current_user: Optional[dict] = Depends(get_cu
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/")
+@router.get("")
 async def get_inventory(store_id: Optional[str] = None, current_user: Optional[dict] = Depends(get_current_user)):
     """
     Get inventory for a specific store (only if user owns the store)
