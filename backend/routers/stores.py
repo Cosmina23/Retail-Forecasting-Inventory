@@ -1,21 +1,27 @@
-from fastapi import APIRouter, HTTPException, Depends
-from database import stores_collection, db
-from models import Store
+from fastapi import APIRouter, HTTPException, status, Depends
+from typing import List, Optional
+from models import Store, StoreCreate
+from utils.auth import get_current_user
+from dal.stores_repo import create_store, get_store_by_id, get_stores_by_user
+from database import db, stores_collection
 from bson import ObjectId
 from bson.errors import InvalidId
-from .auth import get_current_user
-from typing import Optional
 from datetime import datetime, timedelta
 
-router = APIRouter(prefix="/stores", tags=["stores"])
+router = APIRouter(tags=["stores"])
 
+# DB collections used for metrics and some ad-hoc endpoints
 sales_collection = db["sales"]
 inventory_collection = db["inventory"]
 
 
 @router.get("/")
-async def get_user_stores(current_user: Optional[dict] = Depends(get_current_user)):
-    # 1. Cazul pentru vizitatori (fără login)
+async def list_stores(current_user: Optional[dict] = Depends(get_current_user)):
+    """Public listing: returns stores visible to visitors and to authenticated users.
+    - Visitors: return public view of all stores
+    - Authenticated: return stores belonging to the user
+    """
+    # Visitor (no login)
     if not current_user:
         stores = []
         for store in stores_collection.find():
@@ -23,9 +29,14 @@ async def get_user_stores(current_user: Optional[dict] = Depends(get_current_use
             store.pop("_id", None)
             store.pop("user_id", None)
             stores.append(store)
+        for s in stores_collection.find():
+            s["id"] = str(s["_id"])
+            s.pop("_id", None)
+            s.pop("user_id", None)
+            stores.append(s)
         return stores
 
-    # 2. Cazul pentru utilizatori autentificați
+    # Authenticated user: return user's stores
     stores = []
     for store in stores_collection.find({"user_id": current_user["_id"]}):
         store["id"] = str(store["_id"])
@@ -35,58 +46,78 @@ async def get_user_stores(current_user: Optional[dict] = Depends(get_current_use
             store["user_id"] = str(store["user_id"])
 
         stores.append(store)
+    for s in stores_collection.find({"user_id": current_user["_id"]}):
+        s["id"] = str(s["_id"])
+        s.pop("_id", None)
+        if "user_id" in s:
+            s["user_id"] = str(s["user_id"])
+        stores.append(s)
     return stores
 
 
-@router.get("")
-async def get_user_stores_no_slash(current_user: Optional[dict] = Depends(get_current_user)):
-    """Alias for GET / without trailing slash"""
-    return await get_user_stores(current_user)
-
+@router.get("/me", response_model=List[dict])
+async def get_my_stores(current_user: str = Depends(get_current_user)):
+    """Get all stores for the current user (DAL-backed)."""
+    return get_stores_by_user(current_user)
 
 @router.post("/")
 async def create_store(store: Store, current_user: Optional[dict] = Depends(get_current_user)):
     store_data = store.dict()
 
-    if current_user:
-        store_data["user_id"] = current_user["_id"]
+@router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_store_endpoint(store: StoreCreate, current_user: str = Depends(get_current_user)):
+    """Create a new store (DAL-backed)."""
+    try:
+        created = create_store(
+            name=store.name,
+            user_id=current_user,
+            market=store.market,
+            address=store.address,
+        )
+        return created
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     store_data["status"] = store.status
     store_data["revenue"] = store.revenue
 
-    result = stores_collection.insert_one(store_data)
+@router.get("/{store_id}", response_model=dict)
+async def get_store(store_id: str, current_user: Optional[str] = Depends(get_current_user)):
+    """Get a store by ID. Tries DAL first, falls back to direct DB lookup for compatibility."""
+    store = get_store_by_id(store_id)
+    if store:
+        return store
 
-    # Preluăm magazinul proaspăt creat
-    created_store = stores_collection.find_one({"_id": result.inserted_id})
+    # Fallback: direct DB lookup (handles older storage shapes)
+    try:
+        object_id = ObjectId(store_id)
+    except (InvalidId, Exception):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Invalid store ID format: {store_id}")
 
-    # Curățăm obiectul înainte de return
-    created_store["id"] = str(created_store["_id"])
-    created_store.pop("_id", None)
-
-    if "user_id" in created_store:
-        created_store["user_id"] = str(created_store["user_id"])
-
-    return created_store
-
-
-@router.post("")
-async def create_store_no_slash(store: Store, current_user: Optional[dict] = Depends(get_current_user)):
-    """Alias for POST / without trailing slash"""
-    return await create_store(store, current_user)
+    s = stores_collection.find_one({"_id": object_id})
+    if not s:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Store not found")
+    s["id"] = str(s["_id"])
+    s.pop("_id", None)
+    if "user_id" in s:
+        s["user_id"] = str(s["user_id"])
+    return s
 
 
 @router.get("/{store_id}/metrics")
 async def get_store_metrics(store_id: str, current_user: Optional[dict] = Depends(get_current_user)):
     """Get metrics for a specific store (only if user owns the store)"""
+async def get_store_metrics(store_id: str):
+    """Get simple metrics (daily revenue, orders, stock level, critical items)."""
     try:
         # Find store by _id (ObjectId)
+        # validate id
         try:
             object_id = ObjectId(store_id)
         except (InvalidId, Exception):
             raise HTTPException(status_code=404, detail=f"Invalid store ID format: {store_id}")
 
         store = stores_collection.find_one({"_id": object_id})
-
         if not store:
             raise HTTPException(status_code=404, detail=f"Store not found with ID: {store_id}")
 
@@ -117,9 +148,8 @@ async def get_store_metrics(store_id: str, current_user: Optional[dict] = Depend
             "date": {"$gte": yesterday_start, "$lt": today_start}
         }))
 
-        # Calculăm revenue
-        today_revenue = sum(sale.get("quantity", 0) * sale.get("price", 0) for sale in today_sales)
-        yesterday_revenue = sum(sale.get("quantity", 0) * sale.get("price", 0) for sale in yesterday_sales)
+        today_revenue = sum(s.get("quantity", 0) * s.get("price", 0) for s in today_sales)
+        yesterday_revenue = sum(s.get("quantity", 0) * s.get("price", 0) for s in yesterday_sales)
 
         revenue_change = 0
         if yesterday_revenue > 0:
@@ -145,6 +175,9 @@ async def get_store_metrics(store_id: str, current_user: Optional[dict] = Depend
             reorder_level = item.get("reorder_level", default_reorder)
             if current_qty <= reorder_level:
                 critical_items += 1
+        inventory_items = list(inventory_collection.find({"store_id": store_id}))
+        stock_level = sum(item.get("quantity", 0) for item in inventory_items)
+        critical_items = sum(1 for item in inventory_items if item.get("quantity", 0) <= item.get("reorder_level", 0))
 
         result = {
             "daily_revenue": today_revenue,
@@ -154,7 +187,7 @@ async def get_store_metrics(store_id: str, current_user: Optional[dict] = Depend
             "stock_level": stock_level,
             "stock_change": 0,
             "critical_items": critical_items,
-            "critical_items_change": 0
+            "critical_items_change": 0,
         }
 
         return result

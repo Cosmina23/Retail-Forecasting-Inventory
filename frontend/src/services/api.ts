@@ -8,6 +8,7 @@ export interface Store {
 }
 
 class ApiService {
+  [x: string]: any;
   private baseUrl: string;
   private token: string | null = null;
 
@@ -15,6 +16,18 @@ class ApiService {
     this.baseUrl = API_BASE_URL;
     this.token = localStorage.getItem('access_token');
   }
+
+  // ...existing code...
+  // Sales endpoints
+  async getSales(skip = 0, limit = 100, days = 30) {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit), days: String(days) });
+    return this.request(`/api/sales/?${params.toString()}`);
+  }
+
+  async getSalesSummary(days = 30) {
+    return this.request(`/api/sales/summary?days=${days}`);
+  }
+
 
   setToken(token: string) {
     this.token = token;
@@ -121,18 +134,6 @@ class ApiService {
     return this.request('/api/stores');  // ✅ Fix: add /api prefix
   }
 
-  async getStore(storeId: string) {
-    return this.request(`/api/stores/${storeId}`);
-  }
-
-  async createStore(store: any) {
-    console.log('Creating store with data:', store);
-    return this.request('/api/stores', {
-      method: 'POST',
-      body: JSON.stringify(store),
-    });
-  }
-
   async updateStore(storeId: string, store: any) {
     return this.request(`/api/stores/${storeId}`, {
       method: 'PUT',
@@ -155,6 +156,18 @@ class ApiService {
     return this.request(`/api/products/${productId}`);
   }
 
+  async getInventory(storeId: string, skip = 0, limit = 200) {
+    if (!storeId) throw new Error('storeId required');
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    return this.request(`/api/inventory/store/${storeId}?${params.toString()}`);
+  }
+
+  async getLowStock(storeId: string, skip = 0, limit = 200) {
+    if (!storeId) throw new Error('storeId required');
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    return this.request(`/api/inventory/low-stock/${storeId}?${params.toString()}`);
+  }
+
   async createProduct(product: any) {
     return this.request('/api/products/', {
       method: 'POST',
@@ -174,7 +187,6 @@ class ApiService {
       method: 'DELETE',
     });
   }
-
   // Forecasting endpoints
   async getAvailableStores() {
     return this.request('/api/forecasting/stores');
@@ -193,7 +205,11 @@ class ApiService {
   }
 
   async getInventoryStores() {
-    return this.request('/api/inventory/stores');
+    // Use stores endpoint (real stores managed by the user)
+    const res = await this.request('/api/stores/me');
+    // Backend returns an array of stores; normalize to { stores: [...] }
+    if (Array.isArray(res)) return { stores: res };
+    return { stores: res?.stores ?? [] };
   }
 
   // Purchase Orders endpoints
@@ -218,6 +234,56 @@ class ApiService {
     return this.request(`/api/purchase-orders/generate-from-recommendations?${params}`, {
       method: 'POST',
     });
+  }
+  async importProducts(file: File,store_id:string) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('store_id', store_id);
+      if (!store_id) {
+        alert('No store selected!');
+        return;
+    }
+
+
+    const url = `${this.baseUrl}/api/products/import`;
+    const token = this.getToken();
+
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.clearToken();
+        window.location.href = '/login';
+      }
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || 'Upload failed');
+    }
+
+    return await response.json();
+  }
+   // Stores endpoints
+  async createStore(store: { name: string; market: string; address?: string }) {
+    return this.request('/api/stores/', {
+      method: 'POST',
+      body: JSON.stringify(store),
+    });
+  }
+
+  async getMyStores() {
+    return this.request('/api/stores/me');
+  }
+
+  async getStore(storeId: string) {
+    return this.request(`/api/stores/${storeId}`);
   }
 
   // Notifications endpoints

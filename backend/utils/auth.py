@@ -48,9 +48,9 @@ def get_password_hash(password: str) -> str:
     # Returnăm hash-ul ca string (pentru a fi salvat în DB)
     return hashed_password.decode('utf-8')
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create a JWT access token"""
-    to_encode = data.copy()
+def create_access_token(user_id: str, expires_delta: Optional[timedelta] = None):
+    """Create a JWT access token with user_id as sub"""
+    to_encode = {"sub": user_id}
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
@@ -60,30 +60,24 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 def decode_access_token(token: str):
-    """Decode and verify a JWT token"""
+    """Decode and verify a JWT token, return user_id"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
+        user_id: str = payload.get("sub")
+        if user_id is None:
             return None
-        return email
+        return user_id
     except JWTError:
         return None
 
-async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
-    """Get current user from JWT token - Returns None if not authenticated"""
-    if not token:
-        return None
-
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            return None
-    except JWTError:
-        return None
-
-    user = users_collection.find_one({"email": email})
-    if user is None:
-        return None
-    return user
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """Get current user_id from JWT token"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    user_id = decode_access_token(token)
+    if user_id is None:
+        raise credentials_exception
+    return user_id

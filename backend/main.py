@@ -1,6 +1,9 @@
+from models import HealthCheck
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from pymongo import MongoClient
+from utils import create_indexes
 import os
 
 # Load environment variables
@@ -11,7 +14,6 @@ app = FastAPI(
     title="Retail Forecasting & Inventory API",
     description="Backend API for retail forecasting and inventory management",
     version="1.0.0",
-    redirect_slashes=True  # This prevents automatic slash redirects that break POST
 )
 
 # Force reload
@@ -35,24 +37,43 @@ async def root():
         "status": "running"
     }
 
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+@app.get("/api/health", response_model=HealthCheck, tags=["health"])
+def health_check():
+    """Health check endpoint. Verifies API and MongoDB connection."""
+    try:
+        mongo_uri = os.getenv("MONGO_URI", "mongodb://admin:password@localhost:27017/?authSource=admin")
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        # Ping the database
+        client.admin.command("ping")
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"disconnected: {str(e)}"
+
+    return HealthCheck(status="ok", database=db_status)
 
 # Import routers
+from routers import auth, products,stores,sales,forecasting,inventory,purchase_orders
 from routers import auth, products, stores, inventory, sales, forecasts, activity, forecasting, purchase_orders, notifications
 from services.chat import router as chat_router
-
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
+app.include_router(chat_router, prefix="/api")
+app.include_router(stores.router, prefix="/api/stores", tags=["Stores"])
+app.include_router(sales.router, prefix="/api/sales", tags=["Sales"])
 app.include_router(stores.router, prefix="/api", tags=["Stores"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
 app.include_router(sales.router, prefix="/api", tags=["Sales"])  # sales.router already has /sales prefix
 app.include_router(forecasts.router, prefix="/api", tags=["Forecasts"])
 app.include_router(activity.router, prefix="/api", tags=["Activity"])
 app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
+app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
+#varianta flavia-> app.include_router(inventory.router, prefix="/api/data/inventory", tags=["Inventory"])
 app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=["Purchase Orders"])
+
+@app.on_event("startup")
+def startup_event():
+    """Create required indexes on startup."""
+    create_indexes()
 app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
 app.include_router(chat_router, prefix="/api", tags=["Chat"])
 
