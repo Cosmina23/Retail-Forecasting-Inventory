@@ -1,13 +1,13 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, status
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import pandas as pd
 import numpy as np
-from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from datetime import datetime
+from bson import ObjectId
+from bson.errors import InvalidId
 
-import pandas as pd
+# Importuri din arhitectura DAL
 from dal.inventory_repo import (
     get_inventory_by_store,
     get_low_stock,
@@ -19,41 +19,62 @@ from dal.inventory_repo import (
 )
 from dal.stores_repo import get_store_by_id
 from dal.sales_repo import get_sales_by_product
-from database import products_collection, inventory_collection
-from models import InventoryItem, InventoryOptimizationResponse
+
+# Importuri infrastructură
+from database import db, sales_collection, inventory_collection, products_collection
+from models import InventoryOptimizationResponse
 from utils.auth import get_current_user
-from bson import ObjectId
-from datetime import datetime, timedelta
-from database import db, sales_collection, inventory_collection
-from utils.auth import get_current_user
-from bson import ObjectId
-from bson.errors import InvalidId
 
 router = APIRouter()
-
 stores_collection = db["stores"]
 
 
+# --- Utilități interne pentru stabilitate ---
+
+def get_uid(user):
+    """Extrage ID-ul utilizatorului indiferent de format (dict/string)."""
+    if isinstance(user, dict):
+        return user.get("_id")
+    return user
+
+
+def serialize_mongo(doc):
+    """Transformă ObjectId în string recursiv pentru a evita erorile de serializare."""
+    if doc is None:
+        return None
+    if isinstance(doc, list):
+        return [serialize_mongo(item) for item in doc]
+    if isinstance(doc, dict):
+        new_doc = {}
+        for k, v in doc.items():
+            key = "id" if k == "_id" else k
+            new_doc[key] = str(v) if isinstance(v, ObjectId) else serialize_mongo(v)
+        return new_doc
+    return doc
+
+
+# --- ENDPOINTS ---
+
 @router.get("/store/{store_id}")
 def get_inventory_for_store(
-    store_id: str,
-    skip: int = 0,
-    limit: int = 100,
-    current_user: str = Depends(get_current_user),
+        store_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        current_user: any = Depends(get_current_user),
 ):
-    """Return paginated inventory items for a given store (ownership checked).
-
-    Returns JSON: { items: [...], total: <count> }
-    """
+    """Returnează inventarul paginat cu verificare de ownership."""
     store = get_store_by_id(store_id)
     if not store:
         raise HTTPException(status_code=404, detail="Store not found")
-    # Verify ownership
-    if str(store.get("user_id")) != str(current_user):
-        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # VERIFICARE OWNERSHIP SIGURĂ
+    uid = get_uid(current_user)
+    if str(store.get("user_id")) != str(uid):
+        raise HTTPException(status_code=403, detail="Forbidden: Access denied")
 
     items = get_inventory_by_store(store_id, skip=skip, limit=limit)
-    # Enrich with basic product info (sku, name) when possible
+
+    # Îmbogățire date cu info din colecția de produse
     for item in items:
         pid = item.get("product_id")
         if pid and ObjectId.is_valid(pid):
@@ -63,15 +84,20 @@ def get_inventory_for_store(
                 item["product_name"] = prod.get("name")
 
     total = int(inventory_collection.count_documents({"store_id": store_id}))
-    return {"items": items, "total": total}
+
+    # Folosim serializarea pentru a evita eroarea ObjectId
+    return serialize_mongo({"items": items, "total": total})
+
 
 @router.get("/low-stock/{store_id}", response_model=List[dict])
-def get_low_stock_for_store(store_id: str, current_user: str = Depends(get_current_user)):
-    """Return low-stock inventory for a store (ownership checked)."""
+def get_low_stock_for_store(store_id: str, current_user: any = Depends(get_current_user)):
+    """Returnează produsele cu stoc critic."""
     store = get_store_by_id(store_id)
     if not store:
         raise HTTPException(status_code=404, detail="Store not found")
-    if str(store.get("user_id")) != str(current_user):
+
+    uid = get_uid(current_user)
+    if str(store.get("user_id")) != str(uid):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     items = get_low_stock(store_id)
@@ -82,98 +108,79 @@ def get_low_stock_for_store(store_id: str, current_user: str = Depends(get_curre
             if prod:
                 item["product_sku"] = prod.get("sku")
                 item["product_name"] = prod.get("name")
-    return items
+
+    return serialize_mongo(items)
+
 
 @router.get("/optimize/{store_id}", response_model=InventoryOptimizationResponse)
-async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_level: float = 0.95):
-    """
-    Calculate inventory optimization metrics for a store
-    Now reads from MongoDB instead of CSV files
-    """
+async def optimize_inventory(
+        store_id: str,
+        lead_time_days: int = 7,
+        service_level: float = 0.95,
+        current_user: any = Depends(get_current_user)
+):
+    """Calculează metricile de optimizare (ABC, EOQ, Safety Stock) cu validare ownership."""
     try:
-        # Use real inventory from DB
         store = get_store_by_id(store_id)
         if not store:
             raise HTTPException(status_code=404, detail="Store not found")
+
+        uid = get_uid(current_user)
+        if str(store.get("user_id")) != str(uid):
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this store")
 
         inventory_items = get_inventory_by_store(store_id)
         if not inventory_items:
             raise HTTPException(status_code=404, detail=f"No inventory found for store {store_id}")
 
         metrics_list = []
-        # simple default unit cost by category if product has no price
-        unit_costs = {
-            "Electronics": 100,
-            "Clothing": 30,
-            "Food": 5,
-        }
+        unit_costs_default = {"Electronics": 100, "Clothing": 30, "Food": 5}
 
         for item in inventory_items:
             prod_id = item.get("product_id")
-            # Resolve product metadata if available
-            product_name = item.get("product_name")
             category = item.get("category") or "Uncategorized"
-            current_stock = int(item.get("quantity", 0) or 0)
+            current_stock = int(item.get("stock_quantity") or item.get("quantity") or 0)
+            product_name = item.get("product_name") or "Unknown Product"
 
-            # Attempt to get product doc for category/price
-            try:
-                if prod_id and ObjectId.is_valid(prod_id):
-                    prod_doc = products_collection.find_one({"_id": ObjectId(prod_id)})
-                    if prod_doc:
-                        product_name = prod_doc.get("name") or product_name
-                        category = prod_doc.get("category") or category
-                        unit_cost = prod_doc.get("cost") or unit_costs.get(category, 10)
-                    else:
-                        unit_cost = unit_costs.get(category, 10)
-                else:
-                    unit_cost = unit_costs.get(category, 10)
-            except Exception:
-                unit_cost = unit_costs.get(category, 10)
+            # Determinare cost unitar
+            unit_cost = 10
+            if prod_id and ObjectId.is_valid(prod_id):
+                prod_doc = products_collection.find_one({"_id": ObjectId(prod_id)})
+                if prod_doc:
+                    unit_cost = prod_doc.get("cost") or unit_costs_default.get(category, 10)
+                    product_name = prod_doc.get("name") or product_name
 
-            # Get sales for this product (filter by store)
-            sales = []
+            # Preluare vânzări pentru acest produs
+            avg_daily_demand, demand_std, annual_demand = 0.0, 0.0, 0.0
             if prod_id:
-                try:
-                    sales = get_sales_by_product(prod_id)
-                    # filter by store_id (string compare)
-                    sales = [s for s in sales if str(s.get("store_id")) == str(store_id)]
-                except Exception:
-                    sales = []
+                sales = get_sales_by_product(prod_id)
+                # Filtrare vânzări pentru magazinul curent
+                sales = [s for s in sales if str(s.get("store_id")) == str(store_id)]
 
-            # Build dataframe of sales (date, quantity)
-            if sales:
-                df = pd.DataFrame([{
-                    "date": s.get("sale_date") or s.get("created_at"),
-                    "quantity": s.get("quantity", 0)
-                } for s in sales])
-                # ensure datetime
-                df["date"] = pd.to_datetime(df["date"])
-                if df.empty:
-                    continue
+                if sales:
+                    df = pd.DataFrame([{
+                        "date": s.get("sale_date") or s.get("created_at"),
+                        "quantity": s.get("quantity", 0)
+                    } for s in sales])
+                    df["date"] = pd.to_datetime(df["date"])
 
-                avg_daily_demand = df["quantity"].mean()
-                demand_std = df["quantity"].std()
-                if pd.isna(demand_std) or demand_std < 1:
-                    demand_std = max(1.0, avg_daily_demand * 0.2)
+                    if not df.empty:
+                        avg_daily_demand = df["quantity"].mean()
+                        demand_std = df["quantity"].std()
+                        # Fallback pentru deviație standard zero
+                        if pd.isna(demand_std) or demand_std < 0.1:
+                            demand_std = max(0.1, avg_daily_demand * 0.2)
 
-                days_of_data = (df["date"].max() - df["date"].min()).days + 1
-                total_demand = df["quantity"].sum()
-                annual_demand = (total_demand / max(1, days_of_data)) * 365
-            else:
-                # No sales history: set conservative defaults
-                avg_daily_demand = 0.0
-                demand_std = 0.0
-                annual_demand = 0.0
+                        days = (df["date"].max() - df["date"].min()).days + 1
+                        annual_demand = (df["quantity"].sum() / max(1, days)) * 365
 
-            safety_stock = calculate_safety_stock(avg_daily_demand, demand_std or (avg_daily_demand * 0.2), lead_time_days, service_level)
+            # Calcule optimizare folosind functiile din Repo
+            safety_stock = calculate_safety_stock(avg_daily_demand, demand_std, lead_time_days, service_level)
             reorder_point = calculate_reorder_point(avg_daily_demand, lead_time_days, safety_stock)
             eoq = calculate_eoq(annual_demand, unit_cost=unit_cost)
-            unit_price = unit_cost * 1.5
-            annual_revenue = annual_demand * unit_price
-            stock_days = (current_stock / avg_daily_demand) if avg_daily_demand > 0 else 999
 
             metrics_list.append({
-                "product": product_name or str(prod_id),
+                "product": product_name,
                 "category": category,
                 "current_stock": current_stock,
                 "avg_daily_demand": round(avg_daily_demand, 2),
@@ -181,136 +188,89 @@ async def optimize_inventory(store_id: str, lead_time_days: int = 7, service_lev
                 "reorder_point": int(reorder_point),
                 "safety_stock": int(safety_stock),
                 "recommended_order_qty": int(eoq),
-                "annual_revenue": round(annual_revenue, 2),
-                "stock_days": round(stock_days if isinstance(stock_days, (int, float)) else 0, 1),
+                "annual_revenue": round(annual_demand * (unit_cost * 1.5), 2),
+                "stock_days": round(current_stock / avg_daily_demand if avg_daily_demand > 0 else 999, 1),
                 "abc_classification": "",
-                "status": "",
+                "status": ""
             })
 
-        # Create DataFrame for ABC analysis
+        if not metrics_list:
+            raise HTTPException(status_code=404, detail="Could not calculate metrics")
+
+        # Analiză ABC și Status prin Pandas
         metrics_df = pd.DataFrame(metrics_list)
-
-        # Perform ABC analysis
         metrics_df = perform_abc_analysis(metrics_df)
-
-        # Add stock status
         metrics_df['status'] = metrics_df.apply(
-            lambda row: get_stock_status(
-                row['current_stock'],
-                row['reorder_point'],
-                row['safety_stock']
-            ),
-            axis=1
+            lambda r: get_stock_status(r['current_stock'], r['reorder_point'], r['safety_stock']), axis=1
         )
 
-        # Convert back to list of dicts
-        metrics_list = metrics_df.to_dict('records')
+        final_metrics = metrics_df.to_dict('records')
 
-        # Calculate ABC summary
-        abc_summary = {
-            "A": int(metrics_df[metrics_df['abc_classification'] == 'A'].shape[0]),
-            "B": int(metrics_df[metrics_df['abc_classification'] == 'B'].shape[0]),
-            "C": int(metrics_df[metrics_df['abc_classification'] == 'C'].shape[0])
-        }
-
-        total_annual_revenue = float(metrics_df['annual_revenue'].sum())
-
-        return InventoryOptimizationResponse(
-            store_id=store_id,
-            total_products=len(metrics_list),
-            metrics=metrics_list,
-            abc_summary=abc_summary,
-            total_annual_revenue=total_annual_revenue
-        )
-
+        return serialize_mongo({
+            "store_id": store_id,
+            "total_products": len(final_metrics),
+            "metrics": final_metrics,
+            "abc_summary": {
+                "A": int(metrics_df[metrics_df['abc_classification'] == 'A'].shape[0]),
+                "B": int(metrics_df[metrics_df['abc_classification'] == 'B'].shape[0]),
+                "C": int(metrics_df[metrics_df['abc_classification'] == 'C'].shape[0])
+            },
+            "total_annual_revenue": float(metrics_df['annual_revenue'].sum())
+        })
     except Exception as e:
+        print(f"Optimization error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Optimization error: {str(e)}")
 
+
 @router.get("/stores")
-async def get_stores_for_inventory(current_user: Optional[dict] = Depends(get_current_user)):
-    """
-    Get list of stores available for inventory optimization (only user's stores)
-    """
+async def get_stores_for_inventory(current_user: any = Depends(get_current_user)):
+    """Returnează magazinele utilizatorului pentru selectorul de inventar."""
     try:
-        MOCK_DATA_DIR = Path(__file__).parent.parent / "mock_data"
-        sales_history_path = MOCK_DATA_DIR / "sales_history.csv"
+        uid = get_uid(current_user)
+        query = {"user_id": ObjectId(uid) if ObjectId.is_valid(uid) else uid}
 
-        if not sales_history_path.exists():
-        stores_collection = db["stores"]
-
-        # Return empty list if user is not authenticated
-        if not current_user:
-            return {"stores": []}
-
-        sales_history = pd.read_csv(sales_history_path)
-        stores = sales_history["store_id"].unique().tolist()
-
-        return {"stores": [{"id": int(s), "name": f"Store {s}"} for s in stores]}
-
-        # Filter by user_id for authenticated users
-        query = {"user_id": current_user["_id"]}
-
-        stores = list(stores_collection.find(query, {"_id": 1, "name": 1, "store_id": 1}))
+        # Căutăm magazinele (încercăm ambele variante de ID)
+        stores = list(
+            stores_collection.find({"$or": [query, {"user_id": str(uid)}]}, {"_id": 1, "name": 1, "store_id": 1}))
 
         result = []
         for store in stores:
-            store_id = store.get("store_id") or str(store.get("_id"))
-            result.append({
-                "id": store_id,
-                "name": store.get("name", f"Store {store_id}")
-            })
-
+            s_id = str(store.get("_id"))
+            result.append({"id": s_id, "name": store.get("name", f"Store {s_id}")})
         return {"stores": result}
     except Exception as e:
-        print(f"❌ Error getting stores: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("")
-async def get_inventory(store_id: Optional[str] = None, current_user: Optional[dict] = Depends(get_current_user)):
-    """
-    Get inventory for a specific store (only if user owns the store)
-    """
-    try:
-        if not store_id:
-            return []
+async def get_inventory(store_id: Optional[str] = None, current_user: any = Depends(get_current_user)):
+    """Endpoint simplificat pentru Pie Chart Dashboard."""
+    if not store_id:
+        return []
 
-        # Find the store by _id
+    try:
+        # Validare proprietate
         try:
-            object_id = ObjectId(store_id)
-            store = stores_collection.find_one({"_id": object_id})
-        except (InvalidId, Exception):
-            # Try by store_id field as fallback
+            store = stores_collection.find_one({"_id": ObjectId(store_id)})
+        except:
             store = stores_collection.find_one({"store_id": store_id})
 
-        if not store:
+        uid = get_uid(current_user)
+        if not store or str(store.get("user_id")) != str(uid):
             return []
 
-        # Verify store ownership
-        if current_user:
-            if store.get("user_id") != current_user["_id"]:
-                return []
+        actual_id = str(store["_id"])
+        items = list(inventory_collection.find({"store_id": actual_id}))
 
-        # Use the actual _id string for querying inventory
-        actual_store_id = str(store["_id"])
-        query = {"store_id": actual_store_id}
-        inventory_items = list(inventory_collection.find(query))
-
-        result = []
-        for item in inventory_items:
-            result.append({
-                "id": str(item.get("_id")),
-                "product": item.get("product", "Unknown"),
-                "category": item.get("category", "Other"),
-                "stock_quantity": item.get("stock_quantity", 0),
-                "quantity": item.get("stock_quantity", 0),  # For compatibility
-                "reorder_level": item.get("reorder_level", 0),
-                "price": item.get("price", 0),
-                "store_id": item.get("store_id"),
-                "last_updated": item.get("last_updated", datetime.utcnow().isoformat())
-            })
-
-        return result
-    except Exception as e:
-        print(f"❌ Error getting inventory: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return serialize_mongo([{
+            "id": str(i["_id"]),
+            "product": i.get("product") or i.get("product_name") or "Unknown",
+            "category": i.get("category") or "Other",
+            # Trimitere dublă a cheilor pentru compatibilitate Frontend
+            "stock_quantity": i.get("stock_quantity") or i.get("quantity") or 0,
+            "quantity": i.get("quantity") or i.get("stock_quantity") or 0,
+            "reorder_level": i.get("reorder_level", 0),
+            "price": i.get("price", 0)
+        } for i in items])
+    except:
+        return []

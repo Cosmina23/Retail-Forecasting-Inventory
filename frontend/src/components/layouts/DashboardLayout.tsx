@@ -50,10 +50,12 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     try {
       const sel = localStorage.getItem("selectedStore");
       if (sel) {
-        const store = JSON.parse(sel);
-        setStoreName(store.name || null);
-        setStoreId(store._id || store.id || null);
-      }
+      const store = JSON.parse(sel);
+      setStoreName(store.name || null);
+      // MongoDB folosește adesea _id, dar API-ul tău îl transformă în id
+      const id = store.id || store._id || null;
+      setStoreId(id);
+    }
     } catch (e) {
       // ignore
     }
