@@ -169,12 +169,12 @@ def format_purchase_order_german(po_data: dict) -> str:
     # Items table
     text += "ARTIKEL / ITEMS:\n"
     text += "=" * 80 + "\n"
-    text += f"{'Pos':<5} {'Artikel':<30} {'Menge':<10} {'Preis':<12} {'Gesamt':<12}\n"
-    text += f"{'#':<5} {'Description':<30} {'Qty':<10} {'Unit Price':<12} {'Total':<12}\n"
+    text += f"{'Pos':<5} {'Artikel':<40} {'Menge':<10} {'Preis':<12} {'Gesamt':<12}\n"
+    text += f"{'#':<5} {'Product':<40} {'Qty':<10} {'Unit Price':<12} {'Total':<12}\n"
     text += "-" * 80 + "\n"
     
     for idx, item in enumerate(po_data['items'], 1):
-        text += f"{idx:<5} {item['description'][:30]:<30} {item['quantity']:<10} "
+        text += f"{idx:<5} {item['product_name'][:40]:<40} {item['quantity']:<10} "
         text += f"€{item['unit_price']:>9.2f} €{item['line_total']:>9.2f}\n"
     
     text += "=" * 80 + "\n"
@@ -271,11 +271,26 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
     vat_amount = (subtotal + shipping_cost) * supplier_info["vat_rate"]
     total_cost = subtotal + shipping_cost + vat_amount
     
-    # Store information
-    store_info = {
-        "id": request.store_id,
-        "name": f"Store {request.store_id}"
-    }
+    # Store information - fetch from database
+    from database import stores_collection
+    from bson import ObjectId
+    
+    store_info = {"id": request.store_id, "name": f"Store {request.store_id}"}
+    try:
+        if ObjectId.is_valid(request.store_id):
+            store_doc = stores_collection.find_one({"_id": ObjectId(request.store_id)})
+        else:
+            store_doc = stores_collection.find_one({"_id": request.store_id})
+        
+        if store_doc:
+            store_info = {
+                "id": str(store_doc.get("_id")),
+                "name": store_doc.get("name", f"Store {request.store_id}"),
+                "address": store_doc.get("address", ""),
+                "market": store_doc.get("market", "")
+            }
+    except Exception as e:
+        print(f"⚠️ Could not fetch store info: {e}")
     
     # Create PO data
     po_data = {
@@ -313,6 +328,10 @@ async def generate_from_recommendations(
     try:
         print(f"📊 Fetching data from MongoDB for store {store_id}")
 
+        # Import products_collection to resolve product names
+        from database import products_collection
+        from bson import ObjectId
+
         # Read from MongoDB instead of CSV
         sales_cursor = sales_collection.find({"store_id": str(store_id)})
         sales_data = list(sales_cursor)
@@ -320,53 +339,114 @@ async def generate_from_recommendations(
         inventory_cursor = inventory_collection.find({"store_id": str(store_id)})
         inventory_data = list(inventory_cursor)
 
-        if not sales_data:
-            raise HTTPException(status_code=404, detail=f"No sales data found for store {store_id}")
-
         if not inventory_data:
-            raise HTTPException(status_code=404, detail=f"No inventory data found for store {store_id}")
+            raise HTTPException(status_code=404, detail=f"No inventory data found for store {store_id}. Please import inventory data first.")
 
         print(f"✅ Found {len(sales_data)} sales records and {len(inventory_data)} inventory items")
 
         # Convert to DataFrames
-        sales_df = pd.DataFrame(sales_data)
+        sales_df = pd.DataFrame(sales_data) if sales_data else pd.DataFrame()
         inventory_df = pd.DataFrame(inventory_data)
 
         # Calculate what needs to be ordered
         items = []
+        # Track products to avoid duplicates
+        products_dict = {}
+        
         for _, inv_row in inventory_df.iterrows():
-            product = inv_row['product']
-            current_stock = inv_row.get('stock_quantity', 0)
+            product_id = inv_row.get('product_id')
+            current_stock = inv_row.get('quantity', 0)
+            
+            # Skip if no product_id
+            if not product_id:
+                continue
 
-            # Calculate average daily demand
-            product_sales = sales_df[sales_df['product'] == product]
-            if not product_sales.empty:
-                avg_daily_demand = product_sales['quantity'].mean()
+            # If we've already seen this product, just add to stock
+            if product_id in products_dict:
+                products_dict[product_id]['stock'] += current_stock
+                continue
 
-                # Simple reorder logic: if stock < 7 days of demand
-                reorder_threshold = avg_daily_demand * 7
+            # First time seeing this product - get product info
+            product_name = "Unknown Product"
+            category = "Unknown"
+            unit_price = 10.0
+            
+            try:
+                if ObjectId.is_valid(product_id):
+                    product_doc = products_collection.find_one({"_id": ObjectId(product_id)})
+                else:
+                    product_doc = products_collection.find_one({"_id": product_id})
+                
+                if product_doc:
+                    product_name = product_doc.get('name', 'Unknown Product')
+                    category = product_doc.get('category') or 'Unknown'
+                    unit_price = float(product_doc.get('price', 10.0))
+            except Exception as e:
+                print(f"⚠️ Error resolving product {product_id}: {e}")
+            
+            # Ensure category is never None
+            if category is None:
+                category = "Unknown"
 
-                if current_stock < reorder_threshold:
-                    # Order 14 days worth of stock
-                    order_qty = int(avg_daily_demand * 14)
+            # Calculate average daily demand from sales
+            avg_daily_demand = 10  # Default
+            if not sales_df.empty:
+                product_sales = sales_df[sales_df['product_id'] == product_id]
+                if not product_sales.empty:
+                    # Parse sale dates
+                    if 'sale_date' in product_sales.columns:
+                        product_sales['date'] = pd.to_datetime(product_sales['sale_date'])
+                    elif 'date' in product_sales.columns:
+                        product_sales['date'] = pd.to_datetime(product_sales['date'])
+                    else:
+                        product_sales['date'] = pd.to_datetime(product_sales['created_at'])
+                    
+                    # Calculate average daily demand
+                    days = (product_sales['date'].max() - product_sales['date'].min()).days + 1
+                    total_quantity = product_sales['quantity'].sum()
+                    avg_daily_demand = total_quantity / max(1, days)
+                    
+                    # Get average price if available
+                    if 'unit_price' in product_sales.columns:
+                        avg_price = product_sales['unit_price'].mean()
+                        if pd.notna(avg_price) and avg_price > 0:
+                            unit_price = float(avg_price)
 
-                    # Get product info
-                    category = inv_row['category']
-                    unit_price = product_sales['price'].mean() if 'price' in product_sales.columns else 10.0
+            # Store product info (first time)
+            products_dict[product_id] = {
+                'product_name': product_name,
+                'category': category,
+                'unit_price': unit_price,
+                'stock': current_stock,
+                'avg_daily_demand': avg_daily_demand
+            }
 
-                    items.append(PurchaseOrderItem(
-                        product_name=product,
-                        category=category,
-                        quantity=order_qty,
-                        unit_price=unit_price
-                    ))
+        print(f"📊 Found {len(products_dict)} unique products in inventory")
+
+        # Now process all unique products and check reorder logic
+        for product_id, product_info in products_dict.items():
+            # Simple reorder logic: if stock < 7 days of demand
+            reorder_threshold = product_info['avg_daily_demand'] * 7
+
+            if product_info['stock'] < reorder_threshold:
+                # Order 14 days worth of stock
+                order_qty = int(max(1, product_info['avg_daily_demand'] * 14))
+
+                items.append(PurchaseOrderItem(
+                    product_name=product_info['product_name'],
+                    category=product_info['category'],
+                    quantity=order_qty,
+                    unit_price=product_info['unit_price']
+                ))
 
         if not items:
             return {
-                "message": "No items need reordering at this time",
+                "message": "No items need reordering at this time. All inventory levels are sufficient.",
                 "store_id": store_id,
                 "items_checked": len(inventory_data)
             }
+
+        print(f"📦 Generated {len(items)} items to order")
 
         # Generate PO with the items
         po_request = PurchaseOrderRequest(
