@@ -19,7 +19,7 @@ interface DashboardLayoutProps {
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Package, label: "Inventory", path: "/inventory" },
+  { icon: Package, label: "Inventory", path: "/inventory_grid" },
   { icon: TrendingUp, label: "Forecasting", path: "/forecasting" },
   { icon: FileText, label: "Purchase Orders", path: "/purchase-orders" },
   { icon: History, label: "History", path: "/history" },
