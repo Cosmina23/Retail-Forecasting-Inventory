@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { getSales } from '../api';
 import DashboardLayout from '@/components/layouts/DashboardLayout';
 
-export default function Sales() {
+export default function SalesIDK() {
   const [sales, setSales] = useState([]);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);

@@ -19,8 +19,67 @@ class ApiService {
 
   // ...existing code...
   // Sales endpoints
-  async getSales(skip = 0, limit = 100, days = 30) {
-    const params = new URLSearchParams({ skip: String(skip), limit: String(limit), days: String(days) });
+
+  async importSales(file: File, store_id: string) {
+    if (!store_id) {
+      throw new Error('No store selected');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('store_id', store_id);
+
+    const url = `${this.baseUrl}/api/sales/import`;
+    const token = this.getToken();
+
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    console.log('API URL:', url);
+    console.log('FormData content:', Array.from(formData.entries()));
+    console.log('Authorization token:', token);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        this.clearToken();
+        window.location.href = '/login';
+      }
+      // Try to parse JSON error, fall back to text
+      let parsedError: any;
+      try {
+        parsedError = await response.json();
+      } catch (_e) {
+        try {
+          parsedError = await response.text();
+        } catch (_e2) {
+          parsedError = { detail: 'Upload failed' };
+        }
+      }
+
+      const message = (parsedError && (parsedError.detail || parsedError.message))
+        || (typeof parsedError === 'string' ? parsedError : `Request failed with status ${response.status}`);
+
+      const err = new Error(message);
+      // Attach parsed details for callers who want to inspect
+      (err as any).details = parsedError;
+      throw err;
+    }
+
+    return await response.json();
+  }
+  async getSales(skip = 0, limit = 100, days?: number) {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    if (days !== undefined) {
+      params.append('days', String(days));
+    }
     return this.request(`/api/sales/?${params.toString()}`);
   }
 
@@ -88,11 +147,17 @@ class ApiService {
       const data = await response.json();
       console.log('API Response data:', data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('API request failed:', error);
-      // Verifică dacă e network error
+      // Network-level error
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new Error('Cannot connect to server. Make sure the backend is running on ' + this.baseUrl);
+      }
+      // If it's not an Error instance (e.g., raw object), wrap it
+      if (!(error instanceof Error)) {
+        const wrapped = new Error(typeof error === 'string' ? error : JSON.stringify(error));
+        (wrapped as any).details = error;
+        throw wrapped;
       }
       throw error;
     }
@@ -192,10 +257,10 @@ class ApiService {
     return this.request('/api/forecasting/stores');
   }
 
-  async getForecast(storeId: string, days: number = 7) {
+  async getForecast(storeId: string, days: number = 7, productId: string = "") {
     return this.request('/api/forecasting/predict', {
       method: 'POST',
-      body: JSON.stringify({ store_id: storeId, days }),
+      body: JSON.stringify({ store_id: storeId, days, product_id: productId }),
     });
   }
 
@@ -270,6 +335,8 @@ class ApiService {
 
     return await response.json();
   }
+
+  
    // Stores endpoints
   async createStore(store: { name: string; market: string; address?: string }) {
     return this.request('/api/stores/', {
@@ -279,7 +346,10 @@ class ApiService {
   }
 
   async getMyStores() {
-    return this.request('/api/stores/me');
+   const res = await this.request('/api/stores/me');
+    // Backend returns an array of stores; normalize to { stores: [...] }
+    if (Array.isArray(res)) return { stores: res };
+    return { stores: res?.stores ?? [] };
   }
 
   async getStore(storeId: string) {

@@ -40,6 +40,11 @@ def _sanitize_sale_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
     if doc.get("_id"):
         doc["id"] = str(doc["_id"])
         del doc["_id"]
+    # Convert datetime objects to ISO format strings for JSON serialization
+    if doc.get("sale_date") and isinstance(doc["sale_date"], datetime):
+        doc["sale_date"] = doc["sale_date"].isoformat()
+    if doc.get("created_at") and isinstance(doc["created_at"], datetime):
+        doc["created_at"] = doc["created_at"].isoformat()
     return doc
 
 
@@ -124,11 +129,22 @@ def list_sales(skip: int = 0, limit: int = 100, days: int = None) -> List[Dict[s
     """List all sales with pagination. Optionally filter by last N days."""
     query = {}
     if days is not None:
-        from datetime import datetime, timedelta
         cutoff_date = datetime.utcnow() - timedelta(days=days)
         query["sale_date"] = {"$gte": cutoff_date}
+        print(f"list_sales: Filtering with days={days}, cutoff_date={cutoff_date}, cutoff_date type={type(cutoff_date)}")
+    print(f"list_sales: query={query}, skip={skip}, limit={limit}")
+    
+    # Get total count for debugging
+    total_count = sales_collection.count_documents({})
+    filtered_count = sales_collection.count_documents(query)
+    print(f"list_sales: Total sales in DB={total_count}, Matching query={filtered_count}")
+    
     cursor = sales_collection.find(query).skip(skip).limit(limit)
-    return [_sanitize_sale_doc(doc) for doc in cursor]
+    results = [_sanitize_sale_doc(doc) for doc in cursor]
+    print(f"list_sales: Returned {len(results)} documents after skip/limit")
+    if results:
+        print(f"list_sales: First sale sample: {results[0]}")
+    return results
 
 
 def sales_by_day(product_id: str, days: int = 30) -> List[Dict[str, Any]]:
