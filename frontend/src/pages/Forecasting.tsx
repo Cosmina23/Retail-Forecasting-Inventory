@@ -38,10 +38,34 @@ const Forecasting = () => {
   const [forecastDays, setForecastDays] = useState<number>(7);
   const [loading, setLoading] = useState(false);
   const [forecastData, setForecastData] = useState<ForecastResponse | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [productNameMap, setProductNameMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadStores();
+    loadProductNames();
   }, []);
+
+  const loadProductNames = async () => {
+    try {
+      const response = await apiService.getProducts(0, 10000);
+      if (response?.products) {
+        const nameMap: Record<string, string> = {};
+        response.products.forEach((product: any) => {
+          if (product._id) {
+            nameMap[product._id] = product.name || product.sku || product._id;
+          }
+          if (product.id) {
+            nameMap[product.id] = product.name || product.sku || product.id;
+          }
+        });
+        setProductNameMap(nameMap);
+      }
+    } catch (error) {
+      console.error("Failed to load product names:", error);
+    }
+  };
 
   const loadStores = async () => {
     try {
@@ -72,6 +96,7 @@ const Forecasting = () => {
       const productId = "default-product-id"; // Replace with actual product selection logic
       const response = await apiService.getForecast(selectedStore, forecastDays, productId);
       setForecastData(response);
+      setCurrentPage(1); // Reset pagination when new forecast is generated
       toast.success("Forecast generated successfully");
     } catch (error: any) {
       console.error("Failed to generate forecast:", error);
@@ -81,6 +106,19 @@ const Forecasting = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getProductDisplayName = (product: string): string => {
+    // First check if we have a mapping for this product ID
+    if (productNameMap[product]) {
+      return productNameMap[product];
+    }
+    // If product is a valid product name (contains alphanumeric and spaces), return it as is
+    if (product && product.length < 25 && /^[a-zA-Z0-9\s\-]+$/.test(product)) {
+      return product;
+    }
+    // For IDs, return a truncated version
+    return product?.substring(0, 8) + (product?.length > 8 ? '...' : '') || 'Unknown Product';
   };
 
   const formatCurrency = (value: number) => {
@@ -106,11 +144,11 @@ const Forecasting = () => {
     return { label: "Moderate", color: "bg-yellow-500" };
   };
 
-  // Prepare chart data
+  // Prepare chart data with product names
   const chartData = forecastData?.products?.[0]?.dates?.map((date, idx) => ({
     date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     ...Object.fromEntries(
-      forecastData.products.map(p => [p.product, p.daily_forecast[idx] || 0])
+      forecastData.products.map(p => [getProductDisplayName(p.product), p.daily_forecast[idx] || 0])
     )
   })) || [];
 
@@ -287,7 +325,7 @@ const Forecasting = () => {
                           <Area
                             key={product.product}
                             type="monotone"
-                            dataKey={product.product}
+                            dataKey={getProductDisplayName(product.product)}
                             stroke={`hsl(var(--chart-${idx + 1}))`}
                             fill={`url(#color${idx})`}
                             strokeWidth={2}
@@ -305,7 +343,7 @@ const Forecasting = () => {
               <CardHeader>
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
                   <Package className="w-5 h-5 text-primary" />
-                  Inventory Order Recommendations
+                  Inventory Order Recommendations ({forecastData.products.length} products)
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -321,36 +359,81 @@ const Forecasting = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {forecastData.products.map((product, idx) => {
-                      const status = getStockStatus(product.current_stock, product.recommended_order);
-                      return (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium">{product.product}</TableCell>
-                          <TableCell>
-                            <Badge className={getCategoryColor(product.category)} variant="secondary">
-                              {product.category}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">{product.current_stock}</TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {Math.round(product.total_forecast)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className={product.recommended_order > 0 ? "text-orange-500 font-semibold" : "text-muted-foreground"}>
-                              {product.recommended_order}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="secondary" className="text-xs">
-                              <div className={`w-2 h-2 rounded-full ${status.color} mr-1.5`} />
-                              {status.label}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {forecastData.products
+                      .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                      .map((product, idx) => {
+                        const status = getStockStatus(product.current_stock, product.recommended_order);
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell className="font-medium">
+                              {getProductDisplayName(product.product)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={getCategoryColor(product.category)} variant="secondary">
+                                {product.category}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">{product.current_stock}</TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {Math.round(product.total_forecast)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className={product.recommended_order > 0 ? "text-orange-500 font-semibold" : "text-muted-foreground"}>
+                                {product.recommended_order}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="secondary" className="text-xs">
+                                <div className={`w-2 h-2 rounded-full ${status.color} mr-1.5`} />
+                                {status.label}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-between mt-6 gap-4">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-muted-foreground">Items per page:</label>
+                    <select 
+                      value={itemsPerPage} 
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="px-2 py-1 rounded border border-input text-sm"
+                    >
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                    {Math.min(currentPage * itemsPerPage, forecastData.products.length)} of{" "}
+                    {forecastData.products.length} products
+                  </div>
+                  {forecastData.products.length > itemsPerPage && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 rounded border border-input text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(Math.min(Math.ceil(forecastData.products.length / itemsPerPage), currentPage + 1))}
+                        disabled={currentPage === Math.ceil(forecastData.products.length / itemsPerPage)}
+                        className="px-3 py-1 rounded border border-input text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </>

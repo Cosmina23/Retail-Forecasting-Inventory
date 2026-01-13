@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getProducts } from '../api'
+import { apiService } from '../services/api'
 
 export default function Products() {
   const [products, setProducts] = useState([])
@@ -14,7 +14,7 @@ export default function Products() {
       try {
         setLoading(true)
         const skip = (page - 1) * pageSize
-        const data = await getProducts(skip, pageSize)
+        const data = await apiService.getProducts(skip, pageSize)
         setProducts(data.products || [])
         setTotal(data.total || (data.products?.length || 0))
       } catch (err) {
@@ -29,6 +29,8 @@ export default function Products() {
   if (loading) return <main><div className="loading">Loading products...</div></main>
   if (error) return <main><div className="error">Error: {error}</div></main>
 
+  const totalPages = Math.ceil(total / pageSize)
+
   return (
     <main>
       <h2>Products</h2>
@@ -37,12 +39,11 @@ export default function Products() {
         <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
           <option value={50}>50</option>
           <option value={100}>100</option>
-          <option value={200}>200</option>
         </select>
         <div className="ml-auto">
           <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>Prev</button>
-          <span className="mx-2">Page {page} — {total} items</span>
-          <button onClick={() => setPage(page + 1)} disabled={page * pageSize >= total}>Next</button>
+          <span className="mx-2">Page {page} of {totalPages} — {total} items</span>
+          <button onClick={() => setPage(page + 1)} disabled={page >= totalPages}>Next</button>
         </div>
       </div>
       {products.length > 0 ? (
