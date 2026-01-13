@@ -209,6 +209,7 @@ const PurchaseOrders = () => {
   const startEditingItem = (id: string, currentQuantity: number) => {
     setEditingItem(id);
     setEditQuantity(currentQuantity);
+    console.log(`Editing item ${id} with quantity ${currentQuantity}`);
   };
 
   const getFilteredAndSortedItems = () => {
@@ -524,19 +525,18 @@ const PurchaseOrders = () => {
                       </SelectContent>
                     </Select>
                   </div>
-
-                  <div>
-                    <Button 
-                      onClick={handleAutoGenerate} 
-                      disabled={loading}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      <ShoppingCart className="w-4 h-4 mr-2" />
-                      Auto-Generate from Inventory
-                    </Button>
-                  </div>
                 </div>
+
+                <Button 
+                  onClick={handleAutoGenerate} 
+                  disabled={loading}
+                  variant="default"
+                  className="w-full"
+                  size="lg"
+                >
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Auto-Generate from Inventory
+                </Button>
 
                 <div>
                   <Label>Notes / Anmerkungen</Label>
@@ -833,6 +833,7 @@ const PurchaseOrders = () => {
                         {editingItem === item.id ? (
                           <>
                             <Input
+                              key={`edit-${item.id}-${item.quantity}`}
                               type="number"
                               min="1"
                               value={editQuantity}
