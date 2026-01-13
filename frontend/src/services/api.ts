@@ -213,8 +213,9 @@ class ApiService {
   }
 
   // Products endpoints
-  async getProducts() {
-    return this.request('/api/products/');
+  async getProducts(skip = 0, limit = 100) {
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
+    return this.request(`/api/products/?${params.toString()}`);
   }
 
   async getProduct(productId: string) {

@@ -7,7 +7,7 @@ import joblib
 import holidays
 from pathlib import Path
 from datetime import datetime, timedelta
-from database import db, sales_collection, inventory_collection
+from database import db, sales_collection, inventory_collection, products_collection, stores_collection, forecasts_collection
 from models import ForecastRequest, ForecastResponse, ProductForecast
 
 router = APIRouter()
@@ -23,16 +23,22 @@ try:
     features = artifacts["features"]
     categorical_features = artifacts["categorical_features"]
     
-    store_id_map = encoders["store_id_map"]
-    product_map = encoders["product_map"]
-    category_map = encoders["category_map"]
+    store_id_map = encoders.get("store_id_map", {})
+    product_map = encoders.get("product_map", {})
+    category_map = encoders.get("category_map", {})
     
     # Reverse maps for decoding
     product_id_to_name = {v: k for k, v in product_map.items()}
     
     print("✅ Model loaded successfully")
+    print(f"   - Store ID map contains {len(store_id_map)} stores")
 except Exception as e:
     print(f"❌ Error loading model: {e}")
+    # Initialize empty maps as fallback
+    store_id_map = {}
+    product_map = {}
+    category_map = {}
+    product_id_to_name = {}
     model = None
 
 
@@ -43,12 +49,35 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
     
-    # Check if store exists in training data
+    # Check if store exists in the database
+    from bson import ObjectId
     store_id_str = str(store_id)
-    if store_id_str not in store_id_map:
-        raise HTTPException(status_code=404, detail=f"Store {store_id} not found in training data")
     
-    store_code = store_id_map[store_id_str]
+    # Try to find the store in the database
+    store_doc = None
+    if ObjectId.is_valid(store_id_str):
+        store_doc = stores_collection.find_one({"_id": ObjectId(store_id_str)})
+    else:
+        store_doc = stores_collection.find_one({"store_id": store_id_str})
+    
+    if not store_doc:
+        raise HTTPException(status_code=404, detail=f"Store {store_id} not found in database")
+    
+    # Use the store_id_map if available for encoding, otherwise use a fallback
+    store_code = None
+    if store_id_str in store_id_map:
+        store_code = store_id_map[store_id_str]
+        print(f"✅ Using trained store encoding for store {store_id}: {store_code}")
+    else:
+        # For new stores not in training data, use a default/fallback encoding
+        if store_id_map and len(store_id_map) > 0:
+            # Use the first store's code as fallback
+            store_code = list(store_id_map.values())[0]
+            print(f"⚠️ Store {store_id} not in training data, using fallback encoding: {store_code}")
+        else:
+            # If store_id_map is empty, use 1 as default
+            store_code = 1
+            print(f"⚠️ No store encoding available, using default: {store_code}")
     
     # Get German holidays
     de_holidays = holidays.Germany()
@@ -64,12 +93,29 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
         category = prod_row["category"]
         
         # Check if product exists in training data
-        if product_name not in product_map:
-            print(f"⚠️ Product {product_name} not in training data, skipping")
-            continue
+        product_code = None
+        if product_name in product_map:
+            product_code = product_map[product_name]
+            print(f"✅ Using trained product encoding for product {product_name}: {product_code}")
+        else:
+            # For new products not in training data, use a fallback encoding
+            if product_map and len(product_map) > 0:
+                # Use the first product's code as fallback
+                product_code = list(product_map.values())[0]
+                print(f"⚠️ Product {product_name} not in training data, using fallback encoding: {product_code}")
+            else:
+                # If product_map is empty, use a default value
+                product_code = 1
+                print(f"⚠️ No product encoding available, using default: {product_code}")
             
-        product_code = product_map[product_name]
-        category_code = category_map.get(category, 0)
+        category_code = category_map.get(category)
+        if category_code is None:
+            # If category not in map, use fallback
+            if category_map and len(category_map) > 0:
+                category_code = list(category_map.values())[0]
+                print(f"⚠️ Category {category} not in training data, using fallback: {category_code}")
+            else:
+                category_code = 1
         
         # Get last known values for lag features
         lag_1 = prod_row.get("last_sale", 10)
@@ -113,7 +159,15 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
             # For now, we'll use the average
             lag_1 = r7
     
+    if not forecast_rows:
+        raise HTTPException(status_code=400, detail="No forecast data could be generated. Check that products and store exist in the database.")
+    
     forecast_df = pd.DataFrame(forecast_rows)
+    
+    # Ensure date column is datetime type
+    if 'date' in forecast_df.columns:
+        forecast_df['date'] = pd.to_datetime(forecast_df['date'])
+    
     return forecast_df
 
 
@@ -121,12 +175,35 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
 async def predict_forecast(request: ForecastRequest):
     """
     Generate forecasts for all products in a store for the next N days
-    Now reads from MongoDB instead of CSV files
+    Loads cached forecast if it's less than 7 days old, otherwise generates a new one
     """
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded. Please check server logs.")
     
     try:
+        # Check for cached forecast (less than 7 days old)
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        cached_forecast = forecasts_collection.find_one({
+            "store_id": request.store_id,
+            "forecast_period_days": request.days,
+            "forecast_date": {"$gte": seven_days_ago}
+        }, sort=[("forecast_date", -1)])  # Get the most recent one
+        
+        if cached_forecast:
+            print(f"✅ Found cached forecast from {cached_forecast['forecast_date']}")
+            # Convert cached forecast to response format
+            product_forecasts = [
+                ProductForecast(**pf) for pf in cached_forecast['products']
+            ]
+            return ForecastResponse(
+                store_id=cached_forecast['store_id'],
+                forecast_period=cached_forecast['forecast_period'],
+                products=product_forecasts,
+                total_revenue_forecast=cached_forecast['total_revenue_forecast']
+            )
+        
+        print(f"📊 No recent forecast found, generating new forecast for store {request.store_id}")
+        
         print(f"📊 Fetching data from MongoDB for store {request.store_id}")
 
         # Read from MongoDB instead of CSV
@@ -144,15 +221,45 @@ async def predict_forecast(request: ForecastRequest):
 
         print(f"✅ Found {len(sales_data)} sales records and {len(inventory_data)} inventory items")
 
-        # Convert to DataFrames
+        # Fetch product names once for efficiency
+        products_collection_data = list(products_collection.find({}))
+        product_name_map = {p.get('_id'): p.get('name') for p in products_collection_data if p.get('_id') and p.get('name')}
+        print(f"✅ Loaded {len(product_name_map)} product names from database")
+
+        # Remove MongoDB _id field and convert to DataFrames
+        for doc in sales_data:
+            doc.pop('_id', None)
+        for doc in inventory_data:
+            doc.pop('_id', None)
+        
         sales_history = pd.DataFrame(sales_data)
         current_inventory = pd.DataFrame(inventory_data)
 
-        # Parse dates
-        sales_history['date'] = pd.to_datetime(sales_history['date'])
+        # Parse dates - ensure date column exists and is properly formatted
+        # Sales collection uses 'sale_date', not 'date'
+        if 'sale_date' in sales_history.columns:
+            sales_history['date'] = pd.to_datetime(sales_history['sale_date'])
+        elif 'date' in sales_history.columns:
+            sales_history['date'] = pd.to_datetime(sales_history['date'])
+        else:
+            raise HTTPException(status_code=400, detail="Sales data missing 'date' or 'sale_date' column")
+
+        # Ensure we have product information
+        # If inventory has product_id but not product name, try to look it up from products collection
+        if 'product' not in current_inventory.columns and 'product_id' in current_inventory.columns:
+            # Enrich inventory with product names using the pre-fetched map
+            current_inventory['product'] = current_inventory['product_id'].map(lambda x: product_name_map.get(x, str(x)))
+        
+        # Ensure sales also have product names
+        if 'product' not in sales_history.columns and 'product_id' in sales_history.columns:
+            # Enrich sales with product names using the pre-fetched map
+            sales_history['product'] = sales_history['product_id'].map(lambda x: product_name_map.get(x, str(x)))
 
         # Calculate lag features from history
         products_data = []
+        if 'product' not in current_inventory.columns:
+            raise HTTPException(status_code=400, detail="Inventory data missing 'product' name information")
+        
         for product in current_inventory["product"].unique():
             prod_sales = sales_history[sales_history["product"] == product].sort_values("date")
             prod_inv_match = current_inventory[current_inventory["product"] == product]
@@ -171,10 +278,13 @@ async def predict_forecast(request: ForecastRequest):
                 last_week_sale = 10
                 avg_7day = 10
             
+            # Get category from inventory or sales
+            category = prod_inv.get("category", "Unknown")
+            
             products_data.append({
                 "product": product,
-                "category": prod_inv["category"],
-                "current_stock": prod_inv.get("stock_quantity", 0),
+                "category": category,
+                "current_stock": prod_inv.get("quantity") or prod_inv.get("stock_quantity") or 0,
                 "last_sale": last_sale,
                 "last_week_sale": last_week_sale,
                 "avg_7day": avg_7day,
@@ -188,6 +298,15 @@ async def predict_forecast(request: ForecastRequest):
         
         # Generate forecast features
         forecast_df = create_forecast_features(request.store_id, products_df, request.days)
+        
+        # Ensure date column exists and is properly formatted
+        if 'date' not in forecast_df.columns:
+            raise HTTPException(status_code=500, detail="Forecast DataFrame missing 'date' column")
+        
+        # Ensure all required feature columns exist
+        missing_features = [f for f in features if f not in forecast_df.columns]
+        if missing_features:
+            raise HTTPException(status_code=500, detail=f"Forecast DataFrame missing features: {missing_features}")
         
         # Make predictions
         X_forecast = forecast_df[features].astype("float32")
@@ -217,7 +336,13 @@ async def predict_forecast(request: ForecastRequest):
             
             daily_forecast = prod_forecast["predicted_quantity"].round().astype(int).tolist()
             total_forecast = sum(daily_forecast)
-            dates = prod_forecast["date"].astype(str).tolist()
+            
+            # Convert date objects to ISO format strings for JSON serialization
+            try:
+                dates = [str(d) if isinstance(d, (pd.Timestamp, datetime)) else str(d) for d in prod_forecast["date"].tolist()]
+            except Exception as date_err:
+                print(f"⚠️  Error converting dates for product {product}: {date_err}")
+                raise HTTPException(status_code=500, detail=f"Error serializing dates: {str(date_err)}")
             
             # Get current stock
             prod_info = products_df[products_df["product"] == product].iloc[0]
@@ -246,12 +371,42 @@ async def predict_forecast(request: ForecastRequest):
         # Sort by recommended order (highest first)
         product_forecasts.sort(key=lambda x: x.recommended_order, reverse=True)
         
-        return ForecastResponse(
+        forecast_response = ForecastResponse(
             store_id=request.store_id,
             forecast_period=f"{request.days} days",
             products=product_forecasts,
             total_revenue_forecast=round(total_revenue, 2)
         )
+        
+        # Save forecast to database
+        try:
+            forecast_doc = {
+                "store_id": request.store_id,
+                "forecast_date": datetime.utcnow(),
+                "forecast_period_days": request.days,
+                "forecast_period": f"{request.days} days",
+                "products": [
+                    {
+                        "product": pf.product,
+                        "category": pf.category,
+                        "daily_forecast": pf.daily_forecast,
+                        "total_forecast": pf.total_forecast,
+                        "current_stock": pf.current_stock,
+                        "recommended_order": pf.recommended_order,
+                        "dates": pf.dates
+                    }
+                    for pf in product_forecasts
+                ],
+                "total_revenue_forecast": forecast_response.total_revenue_forecast,
+                "created_at": datetime.utcnow()
+            }
+            result = forecasts_collection.insert_one(forecast_doc)
+            print(f"✅ Forecast saved to database with ID: {result.inserted_id}")
+        except Exception as save_err:
+            print(f"⚠️ Warning: Could not save forecast to database: {save_err}")
+            # Don't fail the request if saving fails, just log the warning
+        
+        return forecast_response
         
     except HTTPException:
         raise
