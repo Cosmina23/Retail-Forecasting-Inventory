@@ -8,6 +8,7 @@ import holidays
 from pathlib import Path
 from datetime import datetime, timedelta
 from database import db, sales_collection, inventory_collection
+from models import ForecastRequest, ForecastResponse, ProductForecast
 
 router = APIRouter()
 
@@ -33,28 +34,6 @@ try:
 except Exception as e:
     print(f"❌ Error loading model: {e}")
     model = None
-
-
-class ForecastRequest(BaseModel):
-    store_id: str
-    days: int = 7
-
-
-class ProductForecast(BaseModel):
-    product: str
-    category: str
-    daily_forecast: List[float]
-    total_forecast: float
-    current_stock: int
-    recommended_order: int
-    dates: List[str]
-
-
-class ForecastResponse(BaseModel):
-    store_id: str
-    forecast_period: str
-    products: List[ProductForecast]
-    total_revenue_forecast: float
 
 
 def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecast_days: int = 7) -> pd.DataFrame:
