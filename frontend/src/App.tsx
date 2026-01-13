@@ -9,6 +9,7 @@ import Setup from "./pages/Setup";
 import ShopSelector from "./pages/ShopSelector";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
+import Inventory_grid from "./pages/Inventory_grid";
 import Forecasting from "./pages/Forecasting";
 import History from "./pages/History";
 import PurchaseOrders from "./pages/PurchaseOrders";
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/:storeId" element={<Dashboard />} />
           <Route path="/inventory/:storeId" element={<Inventory />} />
+          <Route path="/inventory_grid/:storeId" element={<Inventory_grid />} />
           <Route path="/forecasting/:storeId" element={<Forecasting />} />
           <Route path="/purchase-orders/:storeId" element={<PurchaseOrders />} />
           <Route path="/history/:storeId" element={<History />} />

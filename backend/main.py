@@ -15,7 +15,8 @@ from routers import (
     products, 
     stores, 
     sales, 
-    inventory, 
+    inventory,
+    inventory_grid,
     forecasts, 
     forecasting, 
     purchase_orders, 
@@ -76,6 +77,7 @@ app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(stores.router, prefix="/api/stores", tags=["Stores"])  # Devine /api/stores
 app.include_router(sales.router, prefix="/api", tags=["Sales"])    # Devine /api/sales
 app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
+app.include_router(inventory_grid.router, prefix="/api/inventory_grid", tags=["Inventory_grid"])
 app.include_router(forecasts.router, prefix="/api", tags=["Forecasts"])
 app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecasting"])
 app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=["Purchase Orders"])

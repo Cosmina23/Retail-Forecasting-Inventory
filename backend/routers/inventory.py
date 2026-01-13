@@ -119,8 +119,9 @@ async def optimize_inventory(
         service_level: float = 0.95,
         current_user: any = Depends(get_current_user)
 ):
-    """Calculează metricile de optimizare (ABC, EOQ, Safety Stock) cu validare ownership."""
+    """Calculează metricile de optimizare folosind legătura prin Nume Produs (conform DB)."""
     try:
+        # 1. Validare magazin și ownership
         store = get_store_by_id(store_id)
         if not store:
             raise HTTPException(status_code=404, detail="Store not found")
@@ -140,43 +141,54 @@ async def optimize_inventory(
             prod_id = item.get("product_id")
             category = item.get("category") or "Uncategorized"
             current_stock = int(item.get("stock_quantity") or item.get("quantity") or 0)
-            product_name = item.get("product_name") or "Unknown Product"
 
-            # Determinare cost unitar
+            # Pas esențial: Obținem numele exact al produsului pentru a-l căuta în Sales
+            product_name = item.get("product_name")
             unit_cost = 10
+
             if prod_id and ObjectId.is_valid(prod_id):
                 prod_doc = products_collection.find_one({"_id": ObjectId(prod_id)})
                 if prod_doc:
                     unit_cost = prod_doc.get("cost") or unit_costs_default.get(category, 10)
                     product_name = prod_doc.get("name") or product_name
 
-            # Preluare vânzări pentru acest produs
+            if not product_name:
+                continue
+
+            # 2. Preluare vânzări folosind NUMELE (product) și Store ID (string)
+            # Aceasta este corecția principală pentru a nu mai primi 0
             avg_daily_demand, demand_std, annual_demand = 0.0, 0.0, 0.0
-            if prod_id:
-                sales = get_sales_by_product(prod_id)
-                # Filtrare vânzări pentru magazinul curent
-                sales = [s for s in sales if str(s.get("store_id")) == str(store_id)]
 
-                if sales:
-                    df = pd.DataFrame([{
-                        "date": s.get("sale_date") or s.get("created_at"),
-                        "quantity": s.get("quantity", 0)
-                    } for s in sales])
-                    df["date"] = pd.to_datetime(df["date"])
+            sales_query = {
+                "product": product_name,
+                "store_id": str(store_id)
+            }
+            sales = list(sales_collection.find(sales_query))
 
-                    if not df.empty:
-                        avg_daily_demand = df["quantity"].mean()
-                        demand_std = df["quantity"].std()
-                        # Fallback pentru deviație standard zero
-                        if pd.isna(demand_std) or demand_std < 0.1:
-                            demand_std = max(0.1, avg_daily_demand * 0.2)
+            if sales:
+                df = pd.DataFrame([{
+                    "date": s.get("sale_date") or s.get("date") or s.get("created_at"),
+                    "quantity": s.get("quantity", 0)
+                } for s in sales])
 
-                        days = (df["date"].max() - df["date"].min()).days + 1
-                        annual_demand = (df["quantity"].sum() / max(1, days)) * 365
+                df["date"] = pd.to_datetime(df["date"])
 
-            # Calcule optimizare folosind functiile din Repo
+                if not df.empty:
+                    # Calculăm perioada reală din datele de vânzări
+                    total_days = (df["date"].max() - df["date"].min()).days + 1
+                    avg_daily_demand = df["quantity"].sum() / max(1, total_days)
+                    demand_std = df["quantity"].std()
+
+                    if pd.isna(demand_std) or demand_std < 0.1:
+                        demand_std = max(0.1, avg_daily_demand * 0.2)
+
+                    annual_demand = avg_daily_demand * 365
+
+            # 3. Calcule optimizare
             safety_stock = calculate_safety_stock(avg_daily_demand, demand_std, lead_time_days, service_level)
             reorder_point = calculate_reorder_point(avg_daily_demand, lead_time_days, safety_stock)
+
+            # EOQ (Order Quantity)
             eoq = calculate_eoq(annual_demand, unit_cost=unit_cost)
 
             metrics_list.append({
@@ -186,30 +198,28 @@ async def optimize_inventory(
                 "avg_daily_demand": round(avg_daily_demand, 2),
                 "demand_std": round(demand_std, 2),
                 "reorder_point": int(reorder_point),
-                "safety_stock": int(safety_stock),
-                "recommended_order_qty": int(eoq),
+                "safety_stock": int(ss) if 'ss' in locals() else int(safety_stock),
+                "recommended_order_qty": int(eoq) if current_stock <= reorder_point else 0,
                 "annual_revenue": round(annual_demand * (unit_cost * 1.5), 2),
                 "stock_days": round(current_stock / avg_daily_demand if avg_daily_demand > 0 else 999, 1),
-                "abc_classification": "",
-                "status": ""
+                "abc_classification": "C",  # Placeholder
+                "status": ""  # Placeholder
             })
 
         if not metrics_list:
             raise HTTPException(status_code=404, detail="Could not calculate metrics")
 
-        # Analiză ABC și Status prin Pandas
+        # 4. Analiză ABC și Status Final
         metrics_df = pd.DataFrame(metrics_list)
         metrics_df = perform_abc_analysis(metrics_df)
         metrics_df['status'] = metrics_df.apply(
             lambda r: get_stock_status(r['current_stock'], r['reorder_point'], r['safety_stock']), axis=1
         )
 
-        final_metrics = metrics_df.to_dict('records')
-
         return serialize_mongo({
             "store_id": store_id,
-            "total_products": len(final_metrics),
-            "metrics": final_metrics,
+            "total_products": len(metrics_list),
+            "metrics": metrics_df.to_dict('records'),
             "abc_summary": {
                 "A": int(metrics_df[metrics_df['abc_classification'] == 'A'].shape[0]),
                 "B": int(metrics_df[metrics_df['abc_classification'] == 'B'].shape[0]),
@@ -219,7 +229,7 @@ async def optimize_inventory(
         })
     except Exception as e:
         print(f"Optimization error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Optimization error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/stores")
@@ -266,7 +276,6 @@ async def get_inventory(store_id: Optional[str] = None, current_user: any = Depe
             "id": str(i["_id"]),
             "product": i.get("product") or i.get("product_name") or "Unknown",
             "category": i.get("category") or "Other",
-            # Trimitere dublă a cheilor pentru compatibilitate Frontend
             "stock_quantity": i.get("stock_quantity") or i.get("quantity") or 0,
             "quantity": i.get("quantity") or i.get("stock_quantity") or 0,
             "reorder_level": i.get("reorder_level", 0),

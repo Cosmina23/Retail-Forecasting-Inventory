@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart } from "lucide-react";
+import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart as PieChartIcon } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
@@ -38,554 +38,281 @@ interface OptimizationResponse {
   total_annual_revenue: number;
 }
 
-interface Store {
-  id: number;
-  name: string;
-}
-
 const Inventory = () => {
-  const params = useParams();
-  const routeStoreId = params.storeId || null;
-  const [products, setProducts] = useState<any[]>([]);
-  const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(100);
-  const [totalItems, setTotalItems] = useState<number>(0);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newProduct, setNewProduct] = useState({
-    sku: "",
-    name: "",
-    stock: "",
-    safetyStock: "",
-  });
-  const [stores, setStores] = useState<Store[]>([]);
-  const [selectedStore, setSelectedStore] = useState<string>(routeStoreId ?? "");
+  const { storeId } = useParams<{ storeId: string }>();
+
   const [leadTime, setLeadTime] = useState<number>(7);
   const [serviceLevel, setServiceLevel] = useState<number>(0.95);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OptimizationResponse | null>(null);
 
-  useEffect(() => {
-    loadStores();
-  }, []);
-
-  const loadStores = async () => {
-    try {
-      const response = await apiService.getInventoryStores();
-      const storesList = response?.stores ?? [];
-      console.debug('loadStores -> storesList:', storesList);
-      setStores(storesList);
-      // Prefer route store id, then localStorage, otherwise first store
-      const lsStore = localStorage.getItem("store_id") || localStorage.getItem("selectedStore");
-      let preferred = routeStoreId ?? null;
-      if (!preferred && lsStore) {
-        try {
-          // stored selectedStore might be stringified object
-          const parsed = JSON.parse(lsStore);
-          preferred = parsed?._id?.toString?.() ?? parsed?.id?.toString?.() ?? lsStore;
-        } catch {
-          preferred = lsStore;
-        }
-      }
-      if (!preferred && storesList.length > 0) {
-        preferred = storesList[0].id?.toString?.() ?? String(storesList[0].id);
-      }
-      if (preferred) setSelectedStore(preferred);
-    } catch (error) {
-      console.error("Failed to load stores:", error);
-      toast.error("Failed to load stores");
-    }
-  };
-
-  const handleOptimize = async () => {
-    if (!selectedStore) {
-      toast.error("Please select a store");
-      return;
-    }
-
+  const handleOptimize = useCallback(async (lTime: number, sLevel: number) => {
+    if (!storeId) return;
     setLoading(true);
     try {
-      const response = await apiService.getInventoryOptimization(selectedStore, leadTime, serviceLevel);
+      const response = await apiService.getInventoryOptimization(storeId, lTime, sLevel);
       setData(response);
-      // optimization response contains total_products; use it for pagination
-      if (response?.total_products != null) {
-        setTotalItems(Number(response.total_products));
-        setPage(1);
-      }
-      toast.success("Inventory optimized successfully");
     } catch (error: any) {
       console.error("Failed to optimize inventory:", error);
-      toast.error(error.message || "Failed to optimize inventory");
+      toast.error(error.message || "Failed to generate optimization data");
     } finally {
       setLoading(false);
     }
+  }, [storeId]);
+
+  useEffect(() => {
+    if (storeId) {
+      handleOptimize(7, 0.95);
+    }
+  }, [storeId, handleOptimize]);
+
+  const onParamChange = (value: string, type: 'lead' | 'service') => {
+    const numVal = Number(value);
+    if (type === 'lead') {
+      setLeadTime(numVal);
+      handleOptimize(numVal, serviceLevel);
+    } else {
+      setServiceLevel(numVal);
+      handleOptimize(leadTime, numVal);
+    }
   };
+
+  const displayedMetrics = useMemo(() => {
+    const raw = data?.metrics ?? [];
+    const map = new Map<string, any>();
+    raw.forEach(m => {
+      const key = (m.product || m.sku || "").toString();
+      if (!map.has(key)) map.set(key, m);
+    });
+    return Array.from(map.values());
+  }, [data]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Critical": return "bg-red-500";
+      case "Critical": return "bg-rose-500";
       case "Low - Order Now": return "bg-orange-500";
-      case "Moderate": return "bg-yellow-500";
-      case "Healthy": return "bg-green-500";
-      default: return "bg-gray-500";
+      case "Moderate": return "bg-amber-500";
+      case "Healthy": return "bg-emerald-500";
+      default: return "bg-slate-400";
     }
   };
 
-  // Load inventory whenever selectedStore changes
-  useEffect(() => {
-    const loadInventory = async () => {
-      try {
-        const storeId = selectedStore || localStorage.getItem("store_id");
-        if (!storeId) return;
-        const skip = (page - 1) * pageSize;
-        const invRes = await apiService.getInventory(storeId, skip, pageSize);
-        const items = invRes?.items ?? [];
-        const total = invRes?.total ?? items.length;
-
-        const mapped = (items || []).map((it: any) => ({
-          sku: it.product_sku || it.product_id,
-          name: it.product_name || it.product_id || "Unnamed product",
-          stock: Number(it.quantity || 0),
-          safetyStock: Number(it.safety_stock ?? it.reorder_point ?? 0),
-          status: Number(it.quantity || 0) > Number(it.safety_stock ?? it.reorder_point ?? 0) ? "in-stock" : "low-stock",
-        }));
-        setProducts(mapped);
-        setTotalItems(Number(total || 0));
-      } catch (err) {
-        console.error("Failed to load inventory:", err);
-        setProducts([]);
-        setTotalItems(0);
-      }
-    };
-
-    if (selectedStore) loadInventory();
-  }, [selectedStore, page, pageSize]);
-
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  // When optimization data is available, prefer those metrics in the table.
-  // Deduplicate metrics by product id/name to avoid repeated rows from DB
-  const rawMetrics = data?.metrics ?? filteredProducts;
-  const displayedMetrics = useMemo(() => {
-    if (!rawMetrics || rawMetrics.length === 0) return [];
-    const map = new Map<string, any>();
-    for (const m of rawMetrics) {
-      // prefer an explicit product id, fallback to product name
-      const key = (m.product_id || m.id || m.sku || m.product || "").toString();
-      if (!map.has(key)) {
-        map.set(key, m);
-      }
-    }
-    return Array.from(map.values());
-  }, [rawMetrics]);
-  // paginate the displayed metrics client-side when optimization returns all metrics
-  const totalPages = Math.max(1, Math.ceil((data?.total_products ?? totalItems) / pageSize));
-  const pagedMetrics = displayedMetrics.slice((page - 1) * pageSize, page * pageSize);
-  const getQuantity = (metric: any) => {
-    const q = metric?.current_stock ?? metric?.quantity ?? metric?.available_quantity ?? metric?.stock ?? metric?.on_hand ?? metric?.qty ?? 0;
-    return Number(q || 0);
-  };
   const getABCColor = (classification: string) => {
     switch (classification) {
-      case "A": return "bg-emerald-500/10 text-emerald-500";
-      case "B": return "bg-blue-500/10 text-blue-500";
-      case "C": return "bg-gray-500/10 text-gray-500";
-      default: return "bg-gray-500/10 text-gray-500";
+      case "A": return "bg-emerald-500/10 text-emerald-600 border-emerald-200";
+      case "B": return "bg-blue-500/10 text-blue-600 border-blue-200";
+      case "C": return "bg-slate-500/10 text-slate-600 border-slate-200";
+      default: return "bg-slate-100 text-slate-500 border-slate-200";
     }
   };
 
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case "Electronics": return "bg-blue-500/10 text-blue-500";
-      case "Clothing": return "bg-purple-500/10 text-purple-500";
-      case "Food": return "bg-green-500/10 text-green-500";
-      default: return "bg-gray-500/10 text-gray-500";
-    }
-  };
-
-  // Prepare ABC chart data (defensive access)
   const abcChartData = data?.abc_summary ? [
-    { name: "A - High Value", value: data.abc_summary.A ?? 0, color: "#10b981" },
-    { name: "B - Medium Value", value: data.abc_summary.B ?? 0, color: "#3b82f6" },
-    { name: "C - Low Value", value: data.abc_summary.C ?? 0, color: "#6b7280" }
+    { name: "A - High Value", short: "A", value: data.abc_summary.A ?? 0, color: "#10b981" },
+    { name: "B - Medium Value", short: "B", value: data.abc_summary.B ?? 0, color: "#3b82f6" },
+    { name: "C - Low Value", short: "C", value: data.abc_summary.C ?? 0, color: "#94a3b8" }
   ] : [];
 
-  // Calculate summary metrics (safe guards)
-  const criticalItems = data?.metrics?.filter(m => m.status === "Critical")?.length || 0;
-  const needsOrdering = data?.metrics?.filter(m => m.status === "Low - Order Now")?.length || 0;
-  const avgStockDays = (data?.metrics && data.metrics.length > 0)
-    ? (data.metrics.reduce((sum, m) => sum + (m.stock_days ?? 0), 0) / data.metrics.length).toFixed(1)
-    : 0;
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const handleAddProduct = async () => {
-    const sel = routeStoreId ? null : localStorage.getItem("selectedStore");
-    const storeId = routeStoreId || (sel ? (() => { try { return JSON.parse(sel)._id || JSON.parse(sel).id } catch { return null } })() : null);
-
-    if (!storeId) return;
-
-    const product = {
-      sku: newProduct.sku,
-      name: newProduct.name,
-      stock: parseInt(newProduct.stock),
-      safetyStock: parseInt(newProduct.safetyStock),
-      store_id: storeId,
-      status: parseInt(newProduct.stock) > parseInt(newProduct.safetyStock) ? "in-stock" : "low-stock",
-    };
-
-    try {
-      const res = await fetch(`http://localhost:8000/api/inventory`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(product),
-      });
-
-      if (res.ok) {
-        setProducts([...products, product]);
-        setNewProduct({ sku: "", name: "", stock: "", safetyStock: "" });
-        setIsDialogOpen(false);
-      }
-    } catch (e) {
-      console.error("Failed to add product", e);
-    }
-  };
-
-  if (loading) {
+  if (loading && !data) {
     return (
       <DashboardLayout>
-        <div className="min-h-screen flex items-center justify-center">Loading inventory...</div>
+        <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+          <p className="text-muted-foreground font-medium animate-pulse">Running intelligent optimization...</p>
+        </div>
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header & Controls */}
-        <Card className="animate-fade-up">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
-              <Package className="w-5 h-5 text-primary" />
-              Inventory Optimization & Analysis
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid sm:grid-cols-4 gap-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                  Select Store
-                </label>
-                <Select value={selectedStore} onValueChange={setSelectedStore}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a store" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((store) => (
-                      <SelectItem key={store.id} value={store.id.toString()}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">Selected store: {selectedStore || 'none'}</p>
+      <div className="flex flex-col h-[calc(100vh-40px)] w-full space-y-4 p-4 overflow-hidden animate-in fade-in duration-500">
+
+        {/* Parameters Section */}
+        <Card className="border-none shadow-sm bg-slate-50/50 backdrop-blur-sm shrink-0">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg shadow-inner">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                </div>
+                <h2 className="text-lg font-bold tracking-tight text-slate-800">Optimization Parameters</h2>
               </div>
 
-              <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                  Lead Time (days)
-                </label>
-                <Select value={leadTime.toString()} onValueChange={(v) => setLeadTime(Number(v))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3">3 Days</SelectItem>
-                    <SelectItem value="7">7 Days</SelectItem>
-                    <SelectItem value="14">14 Days</SelectItem>
-                    <SelectItem value="30">30 Days</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <div className="flex items-center gap-6 flex-1 justify-center">
+                <div className="flex flex-col">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 mb-1 tracking-wider">Lead Time</label>
+                  <Select value={leadTime.toString()} onValueChange={(v) => onParamChange(v, 'lead')}>
+                    <SelectTrigger className="w-[160px] h-9 bg-white border-slate-200 shadow-sm focus:ring-primary/20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 Days (Fast)</SelectItem>
+                      <SelectItem value="7">7 Days (Standard)</SelectItem>
+                      <SelectItem value="14">14 Days (Slow)</SelectItem>
+                      <SelectItem value="30">30 Days (Global)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                  Service Level
-                </label>
-                <Select value={serviceLevel.toString()} onValueChange={(v) => setServiceLevel(Number(v))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0.90">90%</SelectItem>
-                    <SelectItem value="0.95">95%</SelectItem>
-                    <SelectItem value="0.99">99%</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-end">
-                <Button
-                  onClick={handleOptimize}
-                  disabled={loading || !selectedStore}
-                  className="w-full"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Optimizing...
-                    </>
-                  ) : (
-                    <>
-                      <TrendingUp className="w-4 h-4 mr-2" />
-                      Optimize
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-            {/* Pagination controls for inventory list */}
-            <div className="mt-4 flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm">Page size</label>
-                <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="border rounded p-1">
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={200}>200</option>
-                  <option value={500}>500</option>
-                </select>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <Button variant="outline" onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}>Prev</Button>
-                <div className="text-sm">Page {page} / {totalPages} — {totalItems} items</div>
-                <Button variant="outline" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}>Next</Button>
+                <div className="flex flex-col">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 mb-1 tracking-wider">Service Level</label>
+                  <Select value={serviceLevel.toString()} onValueChange={(v) => onParamChange(v, 'service')}>
+                    <SelectTrigger className="w-[160px] h-9 bg-white border-slate-200 shadow-sm focus:ring-primary/20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0.90">90% (Low Risk)</SelectItem>
+                      <SelectItem value="0.95">95% (Balanced)</SelectItem>
+                      <SelectItem value="0.99">99% (Aggressive)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {data && (
+        {data ? (
           <>
-            {/* Summary Cards */}
-            <div className="grid sm:grid-cols-4 gap-4">
-              <Card className="animate-fade-up">
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-                      <Package className="w-5 h-5 text-primary" />
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
+              {[
+                { label: "Total Products", value: data.total_products, icon: Package, color: "blue" },
+                { label: "Action Required", value: data.metrics.filter(m => m.status === "Critical" || m.status === "Low - Order Now").length, icon: AlertTriangle, color: "rose" },
+                { label: "Annual Revenue", value: new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(data.total_annual_revenue), icon: ShoppingCart, color: "emerald" },
+                { label: "Avg Coverage", value: `${(data.metrics.reduce((acc, curr) => acc + (curr.stock_days || 0), 0) / data.metrics.length).toFixed(1)} Days`, icon: TrendingUp, color: "indigo" }
+              ].map((kpi, i) => (
+                <Card key={i} className="bg-white border-none shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className={`p-2.5 bg-${kpi.color}-50 text-${kpi.color}-500 rounded-xl`}>
+                      <kpi.icon className="w-5 h-5" />
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Products</p>
-                      <p className="text-xl font-bold text-foreground">{data.total_products}</p>
+                    <div className="flex flex-col">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">{kpi.label}</p>
+                      <p className="text-xl font-black text-slate-900 leading-none">{kpi.value}</p>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                      <AlertTriangle className="w-5 h-5 text-red-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Critical Items</p>
-                      <p className="text-xl font-bold text-red-500">{criticalItems + needsOrdering}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="animate-fade-up" style={{ animationDelay: "0.1s" }}>
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5 text-success" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Annual Revenue</p>
-                      <p className="text-xl font-bold text-success">{formatCurrency(data.total_annual_revenue)}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="animate-fade-up" style={{ animationDelay: "0.15s" }}>
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
-                      <TrendingUp className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Avg Stock Days</p>
-                      <p className="text-xl font-bold text-foreground">{avgStockDays}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-6">
-              {/* ABC Analysis Chart */}
-              <Card className="animate-fade-up" style={{ animationDelay: "0.2s" }}>
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <PieChart className="w-5 h-5 text-primary" />
-                    ABC Classification
+            {/* Content Area */}
+            <div className="flex-1 min-h-0 grid lg:grid-cols-3 gap-4 overflow-hidden">
+
+              {/* ABC CLASSIFICATION - DESIGN NOU (Donut Chart) */}
+              <Card className="lg:col-span-1 h-full border-none shadow-sm flex flex-col bg-white overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-slate-50 shrink-0">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-700">
+                    <PieChartIcon className="w-4 h-4 text-primary" /> ABC Distribution Analysis
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="h-[250px]">
+                <CardContent className="flex-1 flex flex-col p-6 overflow-hidden">
+                  {/* Containerul graficului cu text central */}
+                  <div className="relative flex-1 min-h-[220px]">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Total SKU</span>
+                      <span className="text-3xl font-black text-slate-900">{data.total_products}</span>
+                    </div>
                     <ResponsiveContainer width="100%" height="100%">
                       <RechartsPie>
+                        <Tooltip
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                        />
                         <Pie
                           data={abcChartData}
                           cx="50%"
                           cy="50%"
-                          labelLine={false}
-                          label={({ name, value }) => `${name.split(' ')[0]}: ${value}`}
-                          outerRadius={80}
-                          fill="#8884d8"
+                          innerRadius="65%"
+                          outerRadius="90%"
+                          paddingAngle={6}
                           dataKey="value"
+                          stroke="none"
                         >
                           {abcChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={entry.color}
+                              className="focus:outline-none transition-opacity hover:opacity-80"
+                            />
                           ))}
                         </Pie>
-                        <Tooltip />
-                        <Legend />
                       </RechartsPie>
                     </ResponsiveContainer>
                   </div>
-                  <div className="mt-4 pt-4 border-t space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">A - High Value:</span>
-                      <span className="font-semibold">{data.abc_summary.A} products (80% revenue)</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">B - Medium Value:</span>
-                      <span className="font-semibold">{data.abc_summary.B} products (15% revenue)</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">C - Low Value:</span>
-                      <span className="font-semibold">{data.abc_summary.C} products (5% revenue)</span>
-                    </div>
+
+                  {/* Legenda rafinată */}
+                  <div className="grid grid-cols-1 gap-3 mt-6">
+                    {abcChartData.map((item) => (
+                      <div key={item.name} className="flex items-center justify-between group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: item.color }} />
+                          <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">{item.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs font-black text-slate-900">{item.value}</span>
+                           <span className="text-[10px] font-bold text-slate-400">({((item.value / data.total_products) * 100).toFixed(0)}%)</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Info Box */}
+                  <div className="mt-auto pt-4 border-t border-slate-100 italic">
+                    <p className="text-[10px] text-slate-400 leading-relaxed text-center">
+                      Analysis based on annual revenue contribution per SKU.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Inventory Metrics Table */}
-              <Card className="lg:col-span-2 animate-fade-up" style={{ animationDelay: "0.25s" }}>
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold">Inventory Optimization Metrics</CardTitle>
+              {/* Optimization Results Table */}
+              <Card className="lg:col-span-2 h-full border-none shadow-sm flex flex-col bg-white overflow-hidden">
+                <CardHeader className="py-4 px-6 border-b border-slate-50 shrink-0">
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">Optimization Recommendations</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="max-h-[400px] overflow-y-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Product</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>ABC</TableHead>
-                          <TableHead className="text-right">Stock</TableHead>
-                          <TableHead className="text-right">ROP</TableHead>
-                          <TableHead className="text-right">Safety Stock</TableHead>
-                          <TableHead className="text-right">EOQ</TableHead>
-                          <TableHead className="text-right">Days Left</TableHead>
-                          <TableHead className="text-center">Status</TableHead>
+                <CardContent className="flex-1 overflow-y-auto p-0 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-white/95 backdrop-blur-md z-10 shadow-sm">
+                      <TableRow className="hover:bg-transparent border-b border-slate-100">
+                        <TableHead className="text-[10px] font-black uppercase text-slate-400 h-11 px-6">Product</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-center text-slate-400 h-11">ABC</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11">Stock</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11">ROP</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11 px-6">Order Qty</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-center text-slate-400 h-11 pr-6">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {displayedMetrics.map((m, i) => (
+                        <TableRow key={i} className="hover:bg-slate-50/50 border-b border-slate-50 transition-colors">
+                          <TableCell className="font-semibold text-[11px] text-slate-700 py-3.5 px-6 max-w-[200px] truncate">{m.product}</TableCell>
+                          <TableCell className="text-center py-3.5">
+                            <Badge className={`${getABCColor(m.abc_classification)} text-[9px] px-1.5 h-5 border font-bold`} variant="outline">{m.abc_classification}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-[11px] text-slate-600 py-3.5">{m.current_stock}</TableCell>
+                          <TableCell className="text-right font-bold text-[11px] text-slate-900 py-3.5">{m.reorder_point}</TableCell>
+                          <TableCell className="text-right font-black text-primary text-[11px] py-3.5 px-6">{m.recommended_order_qty}</TableCell>
+                          <TableCell className="text-center py-3.5 pr-6">
+                            <Badge className={`${getStatusColor(m.status)} text-[9px] text-white border-none font-bold px-2 py-0.5 shadow-sm`}>
+                              {m.status}
+                            </Badge>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pagedMetrics.map((metric, idx) => (
-                          <TableRow key={(metric.product || '') + '-' + idx}>
-                            <TableCell className="font-medium">{metric.product}</TableCell>
-                            <TableCell>
-                              <Badge className={getCategoryColor(metric.category)} variant="secondary">
-                                {metric.category}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={getABCColor(metric.abc_classification)} variant="secondary">
-                                {metric.abc_classification}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">{Number(getQuantity(metric) || 0)}</TableCell>
-                            <TableCell className="text-right font-semibold">{metric.reorder_point}</TableCell>
-                            <TableCell className="text-right">{metric.safety_stock}</TableCell>
-                            <TableCell className="text-right text-primary font-semibold">{metric.recommended_order_qty}</TableCell>
-                            <TableCell className="text-right">{(metric.stock_days ?? 0).toFixed(1)}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="secondary" className="text-xs">
-                                <div className={`w-2 h-2 rounded-full ${getStatusColor(metric.status)} mr-1.5`} />
-                                {metric.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    {displayedMetrics.length === 0 ? (
-            <div className="py-12 text-center">
-              <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-              <p className="text-muted-foreground">No products found</p>
-            </div>
-          ) : pagedMetrics.length === 0 ? (
-            <div className="py-12 text-center">
-              <p className="text-muted-foreground">No products on this page</p>
-            </div>
-          ) : null}
-                  </div>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             </div>
-
-            {/* Legend */}
-            <Card className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
-              <CardContent className="p-4">
-                <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <span className="font-semibold text-foreground">ROP:</span>
-                    <span className="text-muted-foreground ml-2">Reorder Point - When to order</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-foreground">Safety Stock:</span>
-                    <span className="text-muted-foreground ml-2">Buffer inventory for uncertainty</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-foreground">EOQ:</span>
-                    <span className="text-muted-foreground ml-2">Economic Order Quantity - Optimal order size</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-foreground">Days Left:</span>
-                    <span className="text-muted-foreground ml-2">Inventory coverage at current demand</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </>
-        )}
-
-        {!data && !loading && (
-          <Card className="animate-fade-up">
-            <CardContent className="p-12 text-center">
-              <div className="w-16 h-16 rounded-full bg-accent mx-auto mb-4 flex items-center justify-center">
-                <Package className="w-8 h-8 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">No Optimization Data</h3>
-              <p className="text-muted-foreground mb-6">
-                Select a store and click "Optimize" to see inventory optimization recommendations.
-              </p>
-            </CardContent>
-          </Card>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center bg-white/50 rounded-2xl border-2 border-dashed border-slate-200">
+            <div className="p-4 bg-slate-100 rounded-full mb-4">
+               <PieChartIcon className="w-10 h-10 text-slate-300" />
+            </div>
+            <p className="text-slate-500 font-bold tracking-tight">System Ready for Analysis</p>
+            <p className="text-slate-400 text-xs">Awaiting store data optimization...</p>
+          </div>
         )}
       </div>
     </DashboardLayout>

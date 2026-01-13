@@ -114,69 +114,65 @@ async def get_store(store_id: str):
 
 
 @router.get("/{store_id}/metrics")
-async def get_store_metrics(store_id: str, current_user: dict = Depends(get_current_user)):
-    """Calculează metricile (Daily Revenue, Orders, Stock, Critical)."""
+async def get_store_metrics(store_id: str, offset: int = 0, current_user: dict = Depends(get_current_user)):
     try:
-        if not ObjectId.is_valid(store_id):
-            raise HTTPException(status_code=400, detail="Invalid store ID format")
-
         store = stores_collection.find_one({"_id": ObjectId(store_id)})
-        if not store:
-            raise HTTPException(status_code=404, detail="Store not found")
-
-        # Verificare proprietate
         uid = get_uid(current_user)
-        if str(store.get("user_id")) != str(uid):
-            raise HTTPException(status_code=403, detail="Forbidden: You do not own this store")
+        if str(store.get("user_id")) != str(uid): raise HTTPException(status_code=403)
 
-        query_id = str(store["_id"])
-
-        # Calcul intervale timp
         now = datetime.utcnow()
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        yesterday_start = today_start - timedelta(days=1)
+        # Calcul Max Offset
+        oldest_doc = sales_collection.find_one({"store_id": store_id}, sort=[("date", 1)])
+        max_offset = int((now - oldest_doc["date"]).total_seconds() // (7 * 24 * 3600)) if oldest_doc else 0
 
-        # Vânzări
-        today_sales = list(sales_collection.find({"store_id": query_id, "date": {"$gte": today_start}}))
-        yesterday_sales = list(
-            sales_collection.find({"store_id": query_id, "date": {"$gte": yesterday_start, "$lt": today_start}}))
+        # Intervale timp
+        view_end = now - timedelta(days=7 * offset)
+        view_start = view_end - timedelta(days=7)
+        comp_start = view_start - timedelta(days=7)
 
-        today_rev = sum(s.get("quantity", 0) * s.get("price", 0) for s in today_sales)
-        yest_rev = sum(s.get("quantity", 0) * s.get("price", 0) for s in yesterday_sales)
+        # Sales queries
+        curr_sales = list(sales_collection.find({"store_id": store_id, "date": {"$gte": view_start, "$lt": view_end}}))
+        past_sales = list(
+            sales_collection.find({"store_id": store_id, "date": {"$gte": comp_start, "$lt": view_start}}))
 
-        rev_change = round(((today_rev - yest_rev) / yest_rev * 100), 1) if yest_rev > 0 else 0
-        ord_change = round(((len(today_sales) - len(yesterday_sales)) / len(yesterday_sales) * 100), 1) if len(
-            yesterday_sales) > 0 else 0
+        # Metrics calculation
+        curr_rev = sum(s.get("quantity", 0) * s.get("price", 0) for s in curr_sales)
+        past_rev = sum(s.get("quantity", 0) * s.get("price", 0) for s in past_sales)
+        rev_chg = round(((curr_rev - past_rev) / past_rev * 100), 1) if past_rev > 0 else 0
 
-        # Inventar
-        inventory_items = list(inventory_collection.find({"store_id": query_id}))
-        total_stock = 0
-        critical_count = 0
+        # Categoriile cele mai vandute (Stil Screen Time)
+        cat_map = defaultdict(float)
+        for s in curr_sales:
+            cat = s.get("category", "Other")
+            cat_map[cat] += s.get("quantity", 0) * s.get("price", 0)
 
-        for item in inventory_items:
-            qty = item.get("quantity") or item.get("stock_quantity") or 0
-            total_stock += qty
-            reorder = item.get("reorder_level") or (qty * 0.2 if qty > 0 else 10)
-            if qty <= reorder:
-                critical_count += 1
+        top_cats = sorted(
+            [{"name": k, "amount": round(v, 2), "percentage": round(v / curr_rev * 100, 1) if curr_rev > 0 else 0}
+             for k, v in cat_map.items()], key=lambda x: x["amount"], reverse=True)
+
+        # Inventory counts
+        inv = list(inventory_collection.find({"store_id": store_id}))
+        total_stock = sum(i.get("stock_quantity") or i.get("quantity") or 0 for i in inv)
+        critical = sum(1 for i in inv if (i.get("stock_quantity") or 0) <= (i.get("reorder_level") or 10))
 
         return {
-            "daily_revenue": round(today_rev, 2),
-            "revenue_change": rev_change,
-            "orders": len(today_sales),
-            "orders_change": ord_change,
+            "weekly_revenue": round(curr_rev, 2),
+            "revenue_change": rev_chg,
+            "orders": len(curr_sales),
+            "orders_change": round(((len(curr_sales) - len(past_sales)) / len(past_sales) * 100), 1) if len(
+                past_sales) > 0 else 0,
             "stock_level": total_stock,
-            "stock_change": 0,
-            "critical_items": critical_count,
-            "critical_items_change": 0
+            "critical_items": critical,
+            "max_offset": max_offset,
+            "top_categories": top_cats[:5]  # Primele 5 cele mai vandute
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{store_id}/sales-forecast")
-async def get_store_sales_forecast(store_id: str, current_user: dict = Depends(get_current_user)):
-    """Date istorice vs Forecast pentru graficul din dashboard."""
+async def get_store_sales_forecast(store_id: str, offset: int = 0, current_user: dict = Depends(get_current_user)):
+    """Date istorice vs Forecast raportate la offset-ul de timp selectat."""
     try:
         if not ObjectId.is_valid(store_id):
             raise HTTPException(status_code=400, detail="Invalid ID")
@@ -187,11 +183,20 @@ async def get_store_sales_forecast(store_id: str, current_user: dict = Depends(g
         if not store or str(store.get("user_id")) != str(uid):
             raise HTTPException(status_code=403, detail="Unauthorized")
 
-        start_date = datetime.utcnow() - timedelta(days=7)
+        # Calculăm intervalul bazat pe offset
+        now = datetime.utcnow()
+        view_end = now - timedelta(days=7 * offset)
+        view_start = view_end - timedelta(days=7)
 
-        # Preluare date
-        sales_data = list(sales_collection.find({"store_id": store_id, "date": {"$gte": start_date}}))
-        forecast_data = list(db["forecasts"].find({"store_id": store_id, "forecast_date": {"$gte": start_date}}))
+        # Preluare date din baza de date
+        sales_data = list(sales_collection.find({
+            "store_id": store_id,
+            "date": {"$gte": view_start, "$lt": view_end}
+        }))
+        forecast_data = list(db["forecasts"].find({
+            "store_id": store_id,
+            "forecast_date": {"$gte": view_start, "$lt": view_end}
+        }))
 
         sales_map = defaultdict(float)
         for s in sales_data:
@@ -207,8 +212,10 @@ async def get_store_sales_forecast(store_id: str, current_user: dict = Depends(g
             forecast_map[d_obj.strftime("%b %d")] += val
 
         result = []
+        # Generăm cele 7 zile ale ferestrei selectate
         for i in range(7, 0, -1):
-            day = datetime.utcnow() - timedelta(days=i)
+            # i + (offset * 7) ne dă data corectă în trecut
+            day = now - timedelta(days=i + (offset * 7))
             key = day.strftime("%b %d")
             result.append({
                 "date": key,
