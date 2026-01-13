@@ -40,7 +40,9 @@ const ShopSelector = () => {
     setError(null);
     try {
       const data = await apiService.getMyStores();
-      setShops(data);
+      // Normalize response: apiService.getMyStores may return { stores: [...] } or an array
+      const shopsArray = Array.isArray(data) ? data : data?.stores ?? [];
+      setShops(shopsArray);
     } catch (error: any) {
       setError(error?.message || String(error));
       toast({
@@ -142,41 +144,35 @@ const ShopSelector = () => {
               style={{ animationDelay: `${index * 0.05}s` }}
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 rounded-lg bg-accent flex items-center justify-center">
-                  <Store className="w-6 h-6 text-primary" />
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg bg-accent flex items-center justify-center">
+                    <Store className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-foreground mb-1">{shop.name}</h3>
+                    <p className="text-xs text-muted-foreground">{shop.market || "General Retail"}</p>
+                  </div>
                 </div>
 
-                {/* Zonă butoane acțiuni (Delete) */}
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-success" />
                     <span className="text-xs text-muted-foreground capitalize">Online</span>
                   </div>
 
-                  {/* Butonul de Ștergere */}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
-                      e.stopPropagation(); // Prevenim navigarea către dashboard
+                      e.stopPropagation();
                       setStoreToDelete(shop);
                     }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">No Stores Yet</h3>
-                <p className="text-muted-foreground mb-6 max-w-md">
-                  Get started by creating your first store to manage inventory and track sales.
-                </p>
-                <Button variant="hero" onClick={() => setIsNewStoreDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" /> Create Your First Store
-                </Button>
               </div>
-
-              <h3 className="font-semibold text-foreground mb-1">{shop.name}</h3>
-              <p className="text-xs text-muted-foreground mb-4 italic">{shop.market || "General Retail"}</p>
 
               <div className="flex items-center gap-2 mt-4 pt-4 border-t">
                 <TrendingUp className="w-4 h-4 text-success" />

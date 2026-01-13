@@ -68,9 +68,9 @@ const Forecasting = () => {
 
     setLoading(true);
     try {
-      // Include product_id in the request body
+      // Include product_id in the request body (backend requires it)
       const productId = "default-product-id"; // Replace with actual product selection logic
-      const response = await apiService.getForecast(selectedStore, forecastDays);
+      const response = await apiService.getForecast(selectedStore, forecastDays, productId);
       setForecastData(response);
       toast.success("Forecast generated successfully");
     } catch (error: any) {

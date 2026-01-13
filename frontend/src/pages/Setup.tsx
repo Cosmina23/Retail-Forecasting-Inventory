@@ -12,7 +12,7 @@ const Setup = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
-  const [shopData, setShopData] = useState({ name: "", market: "" });
+  const [shopData, setShopData] = useState({ name: "", market: "" ,adress:""});
   const [storeId, setStoreId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -119,6 +119,8 @@ const Setup = () => {
     try {
       // Optionally, you can pass storeId to the backend if your import endpoint supports it
       const store_id = localStorage.getItem('store_id');
+      console.log('store_id from localStorage:', store_id);
+      console.log('Uploaded file:', uploadedSaleFile);
       const result = await apiService.importSales(uploadedSaleFile,store_id);
       const imported = result.inserted_or_updated ?? result.inserted_count ?? 0;
       const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
@@ -174,6 +176,7 @@ const Setup = () => {
                   const store = await apiService.createStore({
                     name: shopData.name,
                     market: shopData.market,
+                    address: shopData.adress|| "Default Address", // Ensure address is provided
                   });
                   setStoreId(store.id);
                   localStorage.setItem('store_id',store.id);

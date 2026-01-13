@@ -37,6 +37,10 @@ class ApiService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    console.log('API URL:', url);
+    console.log('FormData content:', Array.from(formData.entries()));
+    console.log('Authorization token:', token);
+
     const response = await fetch(url, {
       method: 'POST',
       headers,
@@ -48,8 +52,25 @@ class ApiService {
         this.clearToken();
         window.location.href = '/login';
       }
-      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(error.detail || 'Upload failed');
+      // Try to parse JSON error, fall back to text
+      let parsedError: any;
+      try {
+        parsedError = await response.json();
+      } catch (_e) {
+        try {
+          parsedError = await response.text();
+        } catch (_e2) {
+          parsedError = { detail: 'Upload failed' };
+        }
+      }
+
+      const message = (parsedError && (parsedError.detail || parsedError.message))
+        || (typeof parsedError === 'string' ? parsedError : `Request failed with status ${response.status}`);
+
+      const err = new Error(message);
+      // Attach parsed details for callers who want to inspect
+      (err as any).details = parsedError;
+      throw err;
     }
 
     return await response.json();
@@ -126,11 +147,17 @@ class ApiService {
       const data = await response.json();
       console.log('API Response data:', data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('API request failed:', error);
-      // Verifică dacă e network error
+      // Network-level error
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new Error('Cannot connect to server. Make sure the backend is running on ' + this.baseUrl);
+      }
+      // If it's not an Error instance (e.g., raw object), wrap it
+      if (!(error instanceof Error)) {
+        const wrapped = new Error(typeof error === 'string' ? error : JSON.stringify(error));
+        (wrapped as any).details = error;
+        throw wrapped;
       }
       throw error;
     }
@@ -230,10 +257,10 @@ class ApiService {
     return this.request('/api/forecasting/stores');
   }
 
-  async getForecast(storeId: string, days: number = 7) {
+  async getForecast(storeId: string, days: number = 7, productId: string = "") {
     return this.request('/api/forecasting/predict', {
       method: 'POST',
-      body: JSON.stringify({ store_id: storeId, days }),
+      body: JSON.stringify({ store_id: storeId, days, product_id: productId }),
     });
   }
 

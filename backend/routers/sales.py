@@ -1,12 +1,16 @@
 import os
 import tempfile
 import uuid
-from fastapi import APIRouter, Depends, File, Form, Path, Query, HTTPException, UploadFile, status
+from pathlib import Path
+from bson import ObjectId
+import pandas as pd
+from fastapi import APIRouter, Depends, File, Form, Query, HTTPException, UploadFile, status
 from typing import List, Optional
-from backend.dal.products_repo import create_product, get_product_by_id
-from backend.routers.products import _normalize_import_doc
-from backend.services.data_importer import import_products_from_csv, import_products_from_excel
+from dal.products_repo import create_product, get_product_by_id
+from routers.activity import verify_store_ownership
+from services.data_importer import import_products_from_csv, import_products_from_excel
 from utils.auth import get_current_user
+from database import db, sales_collection, products_collection, stores_collection
 
 # Repository (DAL)
 from dal.sales_repo import (
@@ -20,17 +24,140 @@ from database import db
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-router = APIRouter(tags=["sales"])
+def verify_store_ownership(store_id: str, current_user: Optional[dict]) -> tuple[bool, Optional[str]]:
+    """
+    Verifică dacă magazinul aparține utilizatorului curent.
+    Returnează: (este_proprietar, id_ul_real_din_db)
+    """
+    if not current_user:
+        return False, None
 
-sales_collection = db["sales"]
-products_collection = db["products"]
-inventory_collection = db["inventory"]
+    try:
+        # Încercăm după _id (ObjectId) sau după câmpul store_id
+        if ObjectId.is_valid(store_id):
+            store = stores_collection.find_one({"_id": ObjectId(store_id)})
+        else:
+            store = stores_collection.find_one({"store_id": store_id})
+
+        if not store:
+            return False, None
+
+        # Verificăm ownership (comparăm ID-urile ca stringuri)
+        is_owner = str(store.get("user_id")) == str(current_user["_id"])
+        return is_owner, str(store["_id"])
+    except Exception:
+        return False, None
 
 
-@router.get("/", response_model=List[dict])
-async def get_sales(skip: int = 0, limit: int = 100, days: Optional[int] = None, current_user: str = Depends(get_current_user)):
-    """Get all sales, optionally filter by days."""
-    return list_sales(skip=skip, limit=limit, days=days)
+router = APIRouter(prefix="/sales", tags=["sales"])
+
+
+def _normalize_import_doc(doc: dict) -> dict:
+    """Normalize raw import doc into a product payload."""
+    # Support both standard and Romanian column names
+    name = doc.get("name") or doc.get("Denumire")
+    sku = doc.get("sku")  # Still allow if present, but optional
+    product_id = doc.get("product_id")
+    quantity = doc.get("quantity") or doc.get("Cantitate")
+    total_amount = doc.get("total_amount") or doc.get("Valoare")
+    unit_price = doc.get("unit_price") or doc.get("Pret unitar") or doc.get("price_per_unit")
+    date = doc.get("date") or doc.get("Data")
+
+    if name is None or total_amount is None or date is None:
+        raise ValueError("Missing required fields: name/Denumire, total_amount/Valoare, date/Data")
+
+    try:
+        total_amount_val = float(str(total_amount).replace(",", "").replace(" ", ""))
+    except Exception:
+        raise ValueError(f"Invalid total_amount/Valoare for product {name}")
+
+    unit_price_val = None
+    if unit_price is not None:
+        try:
+            unit_price_val = float(str(unit_price).replace(",", "").replace(" ", ""))
+        except Exception:
+            unit_price_val = None
+
+    cost_val = None
+    if doc.get("cost") not in (None, "", "null", "None"):
+        try:
+            cost_val = float(doc.get("cost"))
+        except Exception:
+            raise ValueError(f"Invalid cost for product {name}")
+
+    store_ids_raw = doc.get("store_ids")
+    store_ids: List[str] = []
+    if isinstance(store_ids_raw, list):
+        store_ids = [str(s).strip() for s in store_ids_raw if str(s).strip()]
+    elif isinstance(store_ids_raw, str):
+        store_ids = [s.strip() for s in store_ids_raw.split(",") if s.strip()]
+    elif store_ids_raw not in (None, "", "null", "None"):
+        store_ids = [str(store_ids_raw).strip()]
+
+    # Optionally parse quantity and date if needed for inventory or audit
+    result = {
+        "name": name,
+        "sku": str(sku) if sku is not None else None,
+        "product_id": product_id,
+        "total_amount": total_amount_val,
+        "unit_price": unit_price_val,
+        "user_id": doc.get("user_id"),
+        "store_ids": store_ids,
+        "date": date,
+    }
+    if quantity is not None:
+        try:
+            result["quantity"] = float(str(quantity).replace(",", "").replace(" ", ""))
+        except Exception:
+            pass
+    return result
+
+
+@router.get("/", response_model=dict)
+async def get_sales(
+        store_id: Optional[str] = Query(None),
+        skip: int = 0,
+        limit: int = 100,
+        days: Optional[int] = None,
+        current_user: dict = Depends(get_current_user)
+):
+    """
+    Obține vânzările. Dacă store_id este furnizat, filtrează și verifică permisiunile.
+    Dacă nu, returnează lista generală (pentru admin sau uz general).
+    """
+    if store_id:
+        is_owner, actual_id = verify_store_ownership(store_id, current_user)
+        if not is_owner:
+            raise HTTPException(status_code=403, detail="Access denied to this store's data")
+
+        # Count total and return paginated items for this store
+        query = {"store_id": actual_id}
+        if days is not None:
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            query["sale_date"] = {"$gte": cutoff_date}
+
+        total = sales_collection.count_documents(query)
+        cursor = sales_collection.find(query).skip(skip).limit(limit)
+        items = []
+        for doc in cursor:
+            items.append(_sanitize_import_doc(doc) if False else doc)
+        # Use DAL sanitizer for consistency
+        from dal.sales_repo import _sanitize_sale_doc
+        items = [_sanitize_sale_doc(d) for d in sales_collection.find(query).skip(skip).limit(limit)]
+
+        return {"total": total, "items": items}
+
+    # Dacă nu e specificat un magazin, returnăm lista generală cu paginare
+    query = {}
+    if days is not None:
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        query["sale_date"] = {"$gte": cutoff_date}
+
+    total = sales_collection.count_documents(query)
+    cursor = sales_collection.find(query).skip(skip).limit(limit)
+    from dal.sales_repo import _sanitize_sale_doc
+    items = [_sanitize_sale_doc(doc) for doc in cursor]
+    return {"total": total, "items": items}
 
 
 @router.get("/summary", response_model=dict)
@@ -99,8 +226,15 @@ async def get_monthly_sales(
     return result
 
 @router.post("/")
-async def create_sale(sale: dict):
-    """Create a new sale record (legacy direct DB endpoint)."""
+async def create_sale(sale: dict, current_user: dict = Depends(get_current_user)):
+    """Înregistrează o vânzare nouă."""
+    # Asigurăm consistența ID-ului magazinului
+    if "store_id" in sale:
+        is_owner, actual_id = verify_store_ownership(sale["store_id"], current_user)
+        if not is_owner:
+            raise HTTPException(status_code=403, detail="Cannot record sale for a store you don't own")
+        sale["store_id"] = actual_id
+
     if "date" not in sale:
         sale["date"] = datetime.utcnow()  # Salvăm ca BSON Date pentru interogări rapide
     elif isinstance(sale["date"], str):
