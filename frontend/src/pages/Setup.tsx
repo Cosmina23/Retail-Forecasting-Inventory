@@ -180,6 +180,7 @@ const Setup = () => {
                   });
                   setStoreId(store.id);
                   localStorage.setItem('store_id',store.id);
+                  localStorage.setItem('selected_store',store.id)
                   toast({ title: "Store created!", description: `Store ${store.name} created successfully.` });
                   setCurrentStep(2);
                 } catch (error: any) {

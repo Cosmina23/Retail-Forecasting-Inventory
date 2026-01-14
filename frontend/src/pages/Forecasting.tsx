@@ -35,6 +35,7 @@ interface Store {
 const Forecasting = () => {
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
+  const [storeName, setStoreName] = useState<string>("");
   const [forecastDays, setForecastDays] = useState<number>(7);
   const [loading, setLoading] = useState(false);
   const [forecastData, setForecastData] = useState<ForecastResponse | null>(null);
@@ -43,7 +44,7 @@ const Forecasting = () => {
   const [productNameMap, setProductNameMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    loadStores();
+    loadSelectedStore();
     loadProductNames();
   }, []);
 
@@ -67,20 +68,19 @@ const Forecasting = () => {
     }
   };
 
-  const loadStores = async () => {
+  const loadSelectedStore = () => {
     try {
-      const response = await apiService.getMyStores();
-      if (response?.stores?.length > 0) {
-        setStores(response.stores);
-        setSelectedStore(response.stores[0].id.toString());
+      const storeData = localStorage.getItem("selectedStore");
+      if (storeData) {
+        const store = JSON.parse(storeData);
+        setSelectedStore(store.id?.toString() || "");
+        setStoreName(store.name || "Selected Store");
       } else {
-        setStores([]);
-        toast.error("No stores available. Please add a store.");
+        toast.error("No store selected. Please select a store first.");
       }
     } catch (error) {
-      console.error("Failed to load stores:", error);
-      setStores([]); // Ensure stores is always an array
-      toast.error("Failed to load stores");
+      console.error("Failed to load selected store:", error);
+      toast.error("Failed to load selected store");
     }
   };
 
@@ -156,7 +156,7 @@ const Forecasting = () => {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Render only if stores are loaded */}
-        {stores.length > 0 ? (
+        {selectedStore ? (
           <Card className="animate-fade-up">
             <CardHeader>
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -166,23 +166,14 @@ const Forecasting = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Store Selection */}
-              <div className="grid sm:grid-cols-3 gap-4">
+              <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                    Select Store
+                    Selected Store
                   </label>
-                  <Select value={selectedStore} onValueChange={setSelectedStore}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.map((store) => (
-                        <SelectItem key={store.id} value={store.id.toString()}>
-                          {store.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="px-3 py-2 border rounded-md bg-muted">
+                    {storeName}
+                  </div>
                 </div>
 
                 <div>
@@ -229,9 +220,9 @@ const Forecasting = () => {
               <div className="w-16 h-16 rounded-full bg-accent mx-auto mb-4 flex items-center justify-center">
                 <Target className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">No Stores Available</h3>
+              <h3 className="text-lg font-semibold mb-2">No Store Selected</h3>
               <p className="text-muted-foreground mb-6">
-                Please add a store to generate forecasts.
+                Please select a store first to generate forecasts.
               </p>
             </CardContent>
           </Card>

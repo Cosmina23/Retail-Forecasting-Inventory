@@ -71,8 +71,9 @@ const Sales = () => {
     if (!uploadFile) return;
     setUploading(true);
     try {
-      const store_id = localStorage.getItem('store_id');
-      const result = await apiService.importSales(uploadFile, store_id);
+      const storeData = localStorage.getItem("selectedStore");
+      const store = storeData ? JSON.parse(storeData) : null;
+      const result = await apiService.importSales(uploadFile, store?.id);
       const imported = result.inserted_or_updated ?? result.inserted_count ?? 0;
       const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
       toast({ title: "Success!", description: `Imported ${imported} sales successfully${errorCount ? `, ${errorCount} rows had issues` : ""}` });
