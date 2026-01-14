@@ -231,3 +231,5 @@ docs/_build/
 site/
 backend/DATABASE_PLAN.md
 backend/DATABASE_SCOPE.md
+
+.idea/workspace.xml
