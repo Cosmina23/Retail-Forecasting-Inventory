@@ -5,11 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2670b04c-5e74-43c9-a7fc-d90ddee9dbc6" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Chatbot.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/services/chat.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/pages/Settings.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Dashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Dashboard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/App.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/ShopSelector.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/ShopSelector.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -56,7 +56,7 @@
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "ai.playground.ignore.import.keys.banner.in.settings": "true",
-    "git-widget-placeholder": "7-adding-a-conversational-query-interface",
+    "git-widget-placeholder": "21-work-on-history-and-settings-page",
     "ignore.virus.scanning.warn.message": "true",
     "last_opened_file_path": "C:/Users/MrCag/Documents/GitHub/Retail-Forecasting-Inventory",
     "node.js.detected.package.eslint": "true",

@@ -15,6 +15,7 @@ import History from "./pages/History";
 import PurchaseOrders from "./pages/PurchaseOrders";
 import NotFound from "./pages/NotFound";
 import Sales from "./pages/Sales";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/register" element={<Register />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/index" element={<ShopSelector />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/:storeId" element={<Dashboard />} />
           <Route path="/inventory/:storeId" element={<Inventory />} />
