@@ -21,7 +21,8 @@ from routers import (
     forecasting, 
     purchase_orders, 
     activity, 
-    notifications
+    notifications,
+    activity_logs
 )
 
 # Încărcare variabile de mediu
@@ -84,6 +85,7 @@ app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=[
 app.include_router(activity.router, prefix="/api", tags=["Activity"])
 app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
+app.include_router(activity_logs.router)
 
 # --- Evenimente Lifecycle ---
 

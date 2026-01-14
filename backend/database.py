@@ -26,6 +26,7 @@ holidays_collection = db["holidays_events"]
 import_runs_collection = db["import_runs"]
 import_logs_collection = db["import_logs"]
 chat_history_collection = db["chat_history"]
+activity_logs_collection = db["activity_logs"]
 
 def get_database():
     """Return database instance"""
