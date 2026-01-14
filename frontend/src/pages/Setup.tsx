@@ -3,9 +3,23 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet, Loader2 } from "lucide-react";
+import { Store, Upload, CheckCircle2, ArrowRight, ArrowLeft, FileSpreadsheet, Loader2, Check, ChevronsUpDown } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 // Removed Node's console import which breaks in browser
 
 const Setup = () => {
@@ -18,6 +32,25 @@ const Setup = () => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedSaleFile, setUploadedSaleFile] = useState<File|null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [openStoreType, setOpenStoreType] = useState(false);
+
+  const storeTypes = [
+    "Electronics",
+    "Retail",
+    "Grocery",
+    "Clothing",
+    "Furniture",
+    "Books",
+    "Pharmacy",
+    "Sports",
+    "Toys",
+    "Hardware",
+    "Automotive",
+    "Beauty",
+    "Pet Supplies",
+    "Office Supplies",
+    "Home & Garden",
+  ];
 
   const steps = [
     { number: 1, title: "Store Details", icon: Store },
@@ -158,14 +191,48 @@ const Setup = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="market">Market / Region</Label>
-              <Input
-                id="market"
-                placeholder="e.g., Berlin"
-                value={shopData.market}
-                onChange={(e) => setShopData({ ...shopData, market: e.target.value })}
-                className="h-11"
-              />
+              <Label htmlFor="market">Store Type</Label>
+              <Popover open={openStoreType} onOpenChange={setOpenStoreType}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openStoreType}
+                    className="h-11 w-full justify-between"
+                  >
+                    {shopData.market || "Select store type..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search store type..." />
+                    <CommandList onWheel={(e) => e.stopPropagation()}>
+                      <CommandEmpty>No store type found.</CommandEmpty>
+                      <CommandGroup>
+                        {storeTypes.map((type) => (
+                          <CommandItem
+                            key={type}
+                            value={type}
+                            onSelect={(currentValue) => {
+                              setShopData({ ...shopData, market: currentValue === shopData.market.toLowerCase() ? "" : type });
+                              setOpenStoreType(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                shopData.market === type ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {type}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <Button
               variant="hero"

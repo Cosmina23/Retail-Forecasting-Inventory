@@ -40,7 +40,8 @@ export function NewStoreDialog({ open, onOpenChange, onStoreCreated }: NewStoreD
 
       const result = await apiService.createStore({
         name: name.trim(),
-        status: "online",
+        market: "Default Market",
+        address: "Default Address",
       });
 
       console.log('Store created successfully:', result);
