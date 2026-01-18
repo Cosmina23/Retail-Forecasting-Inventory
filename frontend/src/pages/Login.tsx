@@ -41,14 +41,18 @@ const Login = () => {
     <AuthLayout>
       <div className="space-y-6">
         <div className="space-y-2 text-center lg:text-left">
-          <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
-            <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-              <svg className="w-5 h-5 text-primary-foreground" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <span className="text-lg font-semibold text-foreground">StockSentinel</span>
+          {/* NEW LOGO SECTION - Centered for mobile/tablet */}
+          <div className="lg:hidden flex items-center justify-center mb-8">
+            <img
+              src="/photos/stok_no_bg.png"
+              alt="App Logo"
+              className="h-14 w-auto object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           </div>
+
           <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
           <p className="text-muted-foreground">
             Sign in to manage your stores
@@ -65,6 +69,7 @@ const Login = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="h-11"
+              required
             />
           </div>
 
@@ -82,6 +87,7 @@ const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-11"
+              required
             />
           </div>
 

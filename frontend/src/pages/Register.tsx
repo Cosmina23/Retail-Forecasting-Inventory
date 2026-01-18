@@ -55,14 +55,18 @@ const Register = () => {
     >
       <div className="space-y-6">
         <div className="space-y-2 text-center lg:text-left">
-          <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
-            <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-              <svg className="w-5 h-5 text-primary-foreground" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <span className="text-lg font-semibold text-foreground">StockSentinel</span>
+          {/* LOGO NOU - Apare doar pe ecrane mici, centrat */}
+          <div className="lg:hidden flex items-center justify-center mb-8">
+            <img
+              src="/photos/stok_no_bg.png"
+              alt="App Logo"
+              className="h-14 w-auto object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           </div>
+
           <h1 className="text-2xl font-bold text-foreground">Create an account</h1>
           <p className="text-muted-foreground">
             Start your 14-day free trial
@@ -79,6 +83,7 @@ const Register = () => {
               value={formData.fullName}
               onChange={handleChange("fullName")}
               className="h-11"
+              required
             />
           </div>
 
@@ -91,6 +96,7 @@ const Register = () => {
               value={formData.email}
               onChange={handleChange("email")}
               className="h-11"
+              required
             />
           </div>
 
@@ -103,6 +109,7 @@ const Register = () => {
               value={formData.password}
               onChange={handleChange("password")}
               className="h-11"
+              required
             />
           </div>
 
@@ -119,7 +126,7 @@ const Register = () => {
           </div>
 
           <div className="flex items-start space-x-2">
-            <Checkbox id="terms" className="mt-1" />
+            <Checkbox id="terms" className="mt-1" required />
             <label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer">
               I accept the{" "}
               <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>
