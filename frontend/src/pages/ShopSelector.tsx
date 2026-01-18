@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-// Am adăugat Trash2 în listă
-import { Store, Plus, TrendingUp, LogOut, Settings, Loader2, Trash2 } from "lucide-react";
+import { Store, Plus, TrendingUp, LogOut, Settings, Loader2, Trash2, Building2 } from "lucide-react";
 import { apiService } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { NewStoreDialog } from "./NewStoreDialog";
@@ -24,10 +23,7 @@ const ShopSelector = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Starea pentru deschiderea pop-up-ului de magazin nou
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  // Starea pentru confirmarea ștergerii
   const [storeToDelete, setStoreToDelete] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -37,10 +33,8 @@ const ShopSelector = () => {
 
   const fetchShops = async () => {
     setLoading(true);
-    setError(null);
     try {
       const data = await apiService.getMyStores();
-      // Normalize response: apiService.getMyStores may return { stores: [...] } or an array
       const shopsArray = Array.isArray(data) ? data : data?.stores ?? [];
       setShops(shopsArray);
     } catch (error: any) {
@@ -58,13 +52,11 @@ const ShopSelector = () => {
   const handleStoreCreated = () => {
     setIsDialogOpen(false);
     fetchShops();
-    toast({ title: "Store created", description: "Store was created successfully." });
   };
 
   const handleDeleteStore = async (store: any) => {
     setIsDeleting(true);
     try {
-      // API call pentru ștergere folosind ID-ul magazinului
       await apiService.deleteStore(store.id || store._id);
       setStoreToDelete(null);
       fetchShops();
@@ -84,23 +76,24 @@ const ShopSelector = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-slate-50"> {/* Fundalul albastru deschis/slate original */}
       {/* Header */}
-      <header className="border-b bg-card sticky top-0 z-10">
-        <div className="container py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center">
-              <svg className="w-5 h-5 text-primary-foreground" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <span className="text-lg font-semibold text-foreground">StockSentinel</span>
+      <header className="border-b bg-white sticky top-0 z-10 shadow-sm">
+        <div className="container max-w-7xl py-4 flex items-center justify-between">
+          <div className="flex items-center">
+            <img
+              src="/photos/stok_no_bg.png"
+              alt="App Logo"
+              className="h-12 w-auto object-contain cursor-pointer transition-transform hover:scale-105"
+              onClick={() => navigate("/index")}
+            />
           </div>
+
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
+            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-primary" onClick={() => navigate("/settings")}>
               <Settings className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-destructive" onClick={() => navigate("/")}>
               <LogOut className="w-5 h-5" />
             </Button>
           </div>
@@ -108,62 +101,58 @@ const ShopSelector = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container py-10">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Your Stores</h1>
-            <p className="text-muted-foreground">Select a store to open its dashboard</p>
-          </div>
-
-          <Button variant="hero" onClick={() => setIsDialogOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" /> New Store
-          </Button>
+      <main className="container max-w-7xl py-12">
+        <div className="mb-10">
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Your Portfolio</h1>
+          <p className="text-slate-500 mt-1">Select a workspace to continue.</p>
         </div>
 
-        <NewStoreDialog
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          onStoreCreated={handleStoreCreated}
-        />
-
-        {loading && (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24">
+            <Loader2 className="w-10 h-10 animate-spin text-primary opacity-30" />
           </div>
-        )}
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {!loading && shops.map((shop: any, index: number) => (
+            {/* CARD: NEW STORE (Dashed) */}
             <div
-              key={shop.id || shop._id}
-              onClick={() => {
-                localStorage.setItem("selectedStore", JSON.stringify(shop));
-                navigate(`/dashboard/${shop.id || shop._id}`);
-              }}
-              className="bg-card border rounded-xl p-6 cursor-pointer card-hover shadow-card animate-fade-up relative group"
-              style={{ animationDelay: `${index * 0.05}s` }}
+              onClick={() => setIsDialogOpen(true)}
+              className="group border-2 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-primary hover:bg-white hover:shadow-xl hover:shadow-primary/5 transition-all min-h-[180px] animate-fade-up bg-slate-50/50"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-accent flex items-center justify-center">
-                    <Store className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-foreground mb-1">{shop.name}</h3>
-                    <p className="text-xs text-muted-foreground">{shop.market || "General Retail"}</p>
-                  </div>
-                </div>
+              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm group-hover:bg-primary transition-colors">
+                <Plus className="w-6 h-6 text-slate-400 group-hover:text-white transition-colors" />
+              </div>
+              <p className="font-semibold text-slate-500 group-hover:text-primary transition-colors">Add New Store</p>
+            </div>
 
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-success" />
-                    <span className="text-xs text-muted-foreground capitalize">Online</span>
+            {/* LISTA MAGAZINE */}
+            {shops.map((shop, index) => (
+              <div
+                key={shop.id || shop._id}
+                onClick={() => {
+                  localStorage.setItem("selectedStore", JSON.stringify(shop));
+                  navigate(`/dashboard/${shop.id || shop._id}`);
+                }}
+                className="bg-white border border-slate-100 rounded-2xl p-6 cursor-pointer shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all animate-fade-up relative group"
+                style={{ animationDelay: `${(index + 1) * 0.05}s` }}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center">
+                      <Building2 className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-800 group-hover:text-primary transition-colors">
+                        {shop.name}
+                      </h3>
+                      <p className="text-xs font-medium text-slate-400">{shop.market || "General Retail"}</p>
+                    </div>
                   </div>
 
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="h-8 w-8 text-slate-300 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
                       e.stopPropagation();
                       setStoreToDelete(shop);
@@ -172,39 +161,45 @@ const ShopSelector = () => {
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-                <TrendingUp className="w-4 h-4 text-success" />
-                <span className="text-sm text-muted-foreground">Revenue:</span>
-                <span className="text-sm font-semibold text-foreground ml-auto">
-                  {formatCurrency(shop.revenue || 0)}
-                </span>
+                <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-50">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-medium text-slate-400 uppercase">Live</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold">Revenue</p>
+                    <p className="text-sm font-bold text-slate-700">{formatCurrency(shop.revenue || 0)}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
 
-      {/* Dialog Confirmare Ștergere */}
+      <NewStoreDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        onStoreCreated={handleStoreCreated}
+      />
+
       <AlertDialog open={!!storeToDelete} onOpenChange={(open) => !open && setStoreToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
+            <AlertDialogTitle>Delete Store?</AlertDialogTitle>
             <AlertDialogDescription>
-              {storeToDelete && (
-                <>Are you sure you want to delete the store "<strong>{storeToDelete.name}</strong>"? This action cannot be undone.</>
-              )}
+              Are you sure you want to delete "<strong>{storeToDelete?.name}</strong>"? This action is permanent.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => storeToDelete && handleDeleteStore(storeToDelete)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-white hover:bg-destructive/90"
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete Store"}
+              {isDeleting ? "Deleting..." : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
