@@ -35,7 +35,6 @@ interface InventoryRow {
     category: string;
     current_stock: number;
     reorder_point: number;
-    lead_time: number;
     sales_7d: number;
     doc: number;
 }
@@ -131,7 +130,6 @@ const InventoryGridPage = () => {
             }
         },
         { field: 'reorder_point', headerName: 'Min. Safety', type: 'number', width: 100, renderCell: (params) => <span className="text-[10px] font-bold text-slate-400 italic">Target: {params.value || 0}</span> },
-        { field: 'lead_time', headerName: 'Lead Time', type: 'number', width: 90, renderCell: (params) => <span className="text-[10px] font-medium text-slate-600">{params.value || 0} d</span> },
         { field: 'sales_7d', headerName: '7D Velocity', type: 'number', width: 100, renderCell: (params) => <div className="flex items-center gap-1"><Activity size={12} className="text-emerald-500" /><span className="text-xs font-black text-slate-700">{params.value || 0}</span></div> },
         {
             field: 'doc',

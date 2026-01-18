@@ -140,12 +140,14 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <ChevronLeft className="w-4 h-4" />
           </Button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md gradient-primary flex items-center justify-center">
-              <svg className="w-4 h-4 text-primary-foreground" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <span className="font-semibold text-sidebar-foreground text-sm">StockSentinel</span>
+            <img
+              src="/photos/stok_no_bg.png"
+              alt="App Logo"
+              className="h-12 w-auto max-w-[140px] object-contain transition-all"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'; // Ascunde dacă nu găsește poza
+              }}
+            />
           </div>
         </div>
 
