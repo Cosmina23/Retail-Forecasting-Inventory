@@ -9,6 +9,7 @@ import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart as 
 import { useParams } from "react-router-dom";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
 interface InventoryMetric {
@@ -45,6 +46,7 @@ const Inventory = () => {
   const [serviceLevel, setServiceLevel] = useState<number>(0.95);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OptimizationResponse | null>(null);
+  const[inventory,setInventory]=useState<any[]>();
 
   const handleOptimize = useCallback(async (lTime: number, sLevel: number) => {
     if (!storeId) return;
@@ -81,7 +83,7 @@ const Inventory = () => {
     const raw = data?.metrics ?? [];
     const map = new Map<string, any>();
     raw.forEach(m => {
-      const key = (m.product || m.sku || "").toString();
+      const key = (m.product || m.sku|| "").toString();
       if (!map.has(key)) map.set(key, m);
     });
     return Array.from(map.values());

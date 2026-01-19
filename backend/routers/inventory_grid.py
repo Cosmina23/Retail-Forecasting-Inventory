@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from database import db, inventory_collection, products_collection, sales_collection
 from dal.inventory_repo import get_inventory_by_store
 from dal.sales_repo import get_sales_by_product
+from dal.products_repo import get_product_by_id
 from utils.auth import get_current_user
+from models import InventoryItem,Product
 
 router = APIRouter()
 
@@ -36,6 +38,8 @@ async def get_inventory_grid(
     start_date_7d = now - timedelta(days=7)
 
     for item in items:
+        pid = item.get("product_id")
+        product=get_product_by_id(pid)
         if category and item.get("category") != category:
             continue
 
@@ -54,10 +58,9 @@ async def get_inventory_grid(
             p_id_obj = prod_id_str
 
         # --- DATE PRODUS (Nume/SKU/Preț) ---
-        prod_doc = products_collection.find_one({"_id": p_id_obj})
-        sku = prod_doc.get("sku", "N/A") if prod_doc else "N/A"
-        name = prod_doc.get("name", "Unknown") if prod_doc else "Unknown"
-        price = prod_doc.get("price", 0) if prod_doc else 0
+        sku = product.get("sku", "N/A") if product else "N/A"
+        name =product.get("name", "Unknown") if product else "Unknown"
+        price = product.get("price", 0) if product else 0
 
         # --- CALCUL 7D VELOCITY ---
         sales_7d_list = list(sales_collection.find({
@@ -69,7 +72,7 @@ async def get_inventory_grid(
 
         # --- CALCUL DOC ---
         sales_period = list(sales_collection.find({
-            "product": name,
+            "product_id": pid,
             "store_id": store_id,
             "date": {"$gte": start_date_period}
         }))
@@ -83,7 +86,7 @@ async def get_inventory_grid(
             "id": str(item["_id"]),
             "sku": sku,
             "name": name,
-            "category": item.get("category", "N/A"),
+            "category": product.get("category", "N/A"),
             "current_stock": stock,
             "unit_price": price,
             "reorder_point": min_safety,  # Afișat ca Min Safety în UI

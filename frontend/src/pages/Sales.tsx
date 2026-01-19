@@ -19,7 +19,6 @@ const Sales = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [days, setDays] = useState<number | undefined>(30);
-  const [storeFilter, setStoreFilter] = useState<string | undefined>(undefined);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [appliedFrom, setAppliedFrom] = useState<string>("");
@@ -34,9 +33,7 @@ const Sales = () => {
   useEffect(() => {
     const fetchNames = async () => {
       const prodIds = Array.from(new Set(sales.map(s => s.product_id).filter(Boolean)));
-      const storeIds = Array.from(new Set(sales.map(s => s.store_id).filter(Boolean)));
       const prodMap: {[id: string]: string} = {...productNames};
-      const storeMap: {[id: string]: string} = {...storeNames};
 
       for (const pid of prodIds) {
         if (!prodMap[pid]) {
@@ -49,19 +46,7 @@ const Sales = () => {
         }
       }
 
-      for (const sid of storeIds) {
-        if (!storeMap[sid]) {
-          try {
-            const store = await apiService.getStore(sid);
-            storeMap[sid] = store?.name ?? sid;
-          } catch (error) {
-            storeMap[sid] = sid;
-          }
-        }
-      }
-
       setProductNames(prodMap);
-      setStoreNames(storeMap);
     };
     if (sales.length) fetchNames();
     // eslint-disable-next-line
@@ -115,14 +100,13 @@ const Sales = () => {
     if (to) to.setHours(23, 59, 59, 999);
 
     return sales.filter((sale) => {
-      const matchesSearch = !term || (sale.product_name?.toLowerCase().includes(term) || sale.sku?.toLowerCase().includes(term));
-      const matchesStore = !storeFilter || sale.store_id === storeFilter;
+      const matchesSearch = !term || (sale.product_name?.toLowerCase().includes(term));
       const dateVal = sale.sale_date || sale.date;
       const saleDt = dateVal ? new Date(dateVal) : undefined;
       const matchesDate = (!from || (saleDt && saleDt >= from)) && (!to || (saleDt && saleDt <= to));
-      return matchesSearch && matchesStore && matchesDate;
+      return matchesSearch&& matchesDate;
     });
-  }, [sales, search, storeFilter, appliedFrom, appliedTo]);
+  }, [sales, search, appliedFrom, appliedTo]);
 
   return (
     <DashboardLayout>
@@ -163,16 +147,10 @@ const Sales = () => {
                 </label>
               </div>
 
-              <Input placeholder="Search by product or SKU" value={search} onChange={(e) => setSearch(e.target.value)} className="w-64" />
+              <Input placeholder="Search by product" value={search} onChange={(e) => setSearch(e.target.value)} className="w-64" />
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mb-4">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Store</span>
-                <Input value={storeFilter || ""} onChange={(e) => setStoreFilter(e.target.value || undefined)} placeholder="store_id" className="w-48" />
-                <Button variant="outline" size="sm" onClick={() => setStoreFilter(localStorage.getItem("store_id") || undefined)}>Use my store</Button>
-                <Button variant="ghost" size="sm" onClick={() => setStoreFilter(undefined)}>Clear</Button>
-              </div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">From</span>
                 <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-44" />
@@ -201,7 +179,6 @@ const Sales = () => {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Product</TableHead>
-                        <TableHead>SKU</TableHead>
                         <TableHead>Store</TableHead>
                         <TableHead>Quantity</TableHead>
                         <TableHead>Total</TableHead>
@@ -212,7 +189,6 @@ const Sales = () => {
                         <TableRow key={sale.id || sale._id || idx}>
                           <TableCell>{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : "-"}</TableCell>
                           <TableCell><Badge variant="secondary">{ productNames[sale.product_id] || sale.product_id }</Badge></TableCell>
-                          <TableCell>{sale.sku || "-"}</TableCell>
                           <TableCell>{storeNames[sale.store_id] || sale.store_name || sale.store_id || "-"}</TableCell>
                           <TableCell>{sale.quantity ?? "-"}</TableCell>
                           <TableCell>{ sale.total_amount !== undefined && sale.total_amount !== null ? `$${Number(sale.total_amount).toFixed(2)}` : sale.total !== undefined && sale.total !== null ? `$${Number(sale.total).toFixed(2)}` : "-" }</TableCell>

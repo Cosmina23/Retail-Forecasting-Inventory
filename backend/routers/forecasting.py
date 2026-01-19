@@ -7,6 +7,7 @@ import joblib
 import holidays
 from pathlib import Path
 from datetime import datetime, timedelta
+from dal.products_repo import get_product_by_id
 from database import db, sales_collection, inventory_collection, products_collection, stores_collection, forecasts_collection
 from models import ForecastRequest, ForecastResponse, ProductForecast
 
@@ -261,6 +262,7 @@ async def predict_forecast(request: ForecastRequest):
             raise HTTPException(status_code=400, detail="Inventory data missing 'product' name information")
         
         for product in current_inventory["product"].unique():
+            prod_2=get_product_by_id(product)
             prod_sales = sales_history[sales_history["product"] == product].sort_values("date")
             prod_inv_match = current_inventory[current_inventory["product"] == product]
 
@@ -279,7 +281,7 @@ async def predict_forecast(request: ForecastRequest):
                 avg_7day = 10
             
             # Get category from inventory or sales
-            category = prod_inv.get("category", "Unknown")
+            category = prod_2.get("category", "Unknown")
             
             products_data.append({
                 "product": product,
