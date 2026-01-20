@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
+import { logActivity} from "@/services/activityLogger";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -256,6 +257,20 @@ const PurchaseOrders = () => {
 
       const po = await apiService.generatePurchaseOrder(orderData);
       setGeneratedPO(po);
+
+      // Log the activity
+      await logActivity(
+        selectedStore,
+        "purchase_order_created",
+        `Created purchase order ${po.po_number}`,
+        {
+          po_number: po.po_number,
+          supplier: selectedSupplier,
+          items_count: items.length,
+          total_cost: po.total_cost,
+        }
+      );
+
       toast.success("Purchase order generated successfully!");
     } catch (error: any) {
       console.error("Failed to generate PO:", error);
@@ -290,6 +305,20 @@ const PurchaseOrders = () => {
         description: item.description
       }));
       setItems(autoItems);
+
+      // Log the activity
+      await logActivity(
+        selectedStore,
+        "purchase_order_created",
+        `Auto-generated purchase order ${po.po_number}`,
+        {
+          po_number: po.po_number,
+          supplier: selectedSupplier,
+          items_count: po.items.length,
+          total_cost: po.total_cost,
+          auto_generated: true,
+        }
+      );
       
       toast.success("Purchase order auto-generated from inventory!");
     } catch (error: any) {
