@@ -25,7 +25,6 @@ import {
   Cell,
   Legend
 } from "recharts";
-import { Chatbot } from '@/components/Chatbot';
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -396,7 +395,6 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
-      <Chatbot storeId={routeStoreId || ""} />
     </DashboardLayout>
   );
 };

@@ -31,48 +31,36 @@ TEMPERATURE = 0.7           # Balance between creativity and consistency
 def get_store_context(store_id: str) -> dict:
     """
     Fetch relevant data from MongoDB for the chatbot context.
-
-    This function queries all relevant collections to build a complete
-    picture of the store's current state for the LLM to analyze.
-
-    Args:
-        store_id: The unique identifier for the store
-
-    Returns:
-        Dictionary containing products, inventory, sales, and forecasts
+    Limits reduced to avoid token overflow.
     """
 
-    # Fetch products - limit to 50 to avoid token overflow
-    # Exclude MongoDB _id field as it's not JSON serializable
+    # Reduce limits significantly
     products = list(
         products_collection.find(
             {"store_id": store_id},
-            {"_id": 0}
-        ).limit(50)
+            {"_id": 0, "name": 1, "category": 1, "price": 1, "sku": 1}
+        ).limit(15)
     )
 
-    # Fetch current inventory levels
     inventory = list(
         inventory_collection.find(
             {"store_id": store_id},
-            {"_id": 0}
-        ).limit(50)
+            {"_id": 0, "product_name": 1, "stock_quantity": 1, "reorder_point": 1}
+        ).limit(15)
     )
 
-    # Fetch recent sales - sorted by date descending (newest first)
     sales = list(
         sales_collection.find(
             {"store_id": store_id},
-            {"_id": 0}
-        ).sort("date", -1).limit(100)
+            {"_id": 0, "product_name": 1, "quantity": 1, "date": 1, "total": 1}
+        ).sort("date", -1).limit(20)
     )
 
-    # Fetch demand forecasts
     forecasts = list(
         forecasts_collection.find(
             {"store_id": store_id},
-            {"_id": 0}
-        ).limit(20)
+            {"_id": 0, "product_name": 1, "predicted_demand": 1, "date": 1}
+        ).limit(10)
     )
 
     return {
@@ -84,70 +72,47 @@ def get_store_context(store_id: str) -> dict:
 
 
 def build_system_prompt(store_data: dict) -> str:
-    """
-    Build the system prompt that defines the chatbot's behavior and context.
+    """Build the system prompt with reduced data previews."""
 
-    The system prompt tells the LLM:
-    1. What role it plays (inventory assistant)
-    2. What data it has access to
-    3. How it should respond
-
-    Args:
-        store_data: Dictionary containing all store data
-
-    Returns:
-        Formatted system prompt string
-    """
-
-    # Safely convert data to JSON strings for the prompt
-    # Limit data shown to avoid exceeding token limits
-    products_preview = json.dumps(store_data['products'][:10], default=str, indent=2)
-    inventory_preview = json.dumps(store_data['inventory'][:10], default=str, indent=2)
-    sales_preview = json.dumps(store_data['recent_sales'][:10], default=str, indent=2)
-    forecasts_preview = json.dumps(store_data['forecasts'][:5], default=str, indent=2)
+    # Show fewer items in previews
+    products_preview = json.dumps(store_data['products'][:5], default=str, indent=2)
+    inventory_preview = json.dumps(store_data['inventory'][:5], default=str, indent=2)
+    sales_preview = json.dumps(store_data['recent_sales'][:5], default=str, indent=2)
+    forecasts_preview = json.dumps(store_data['forecasts'][:3], default=str, indent=2)
 
     return f"""You are an intelligent inventory management assistant for a retail store.
-Your role is to help store managers make informed decisions about inventory, orders, and sales.
 
 CAPABILITIES:
 - Analyze inventory levels and identify low-stock items
-- Review sales trends and patterns
-- Provide reorder recommendations based on forecasts
-- Explain why certain products are performing well or poorly
-- Calculate optimal order quantities considering lead times
+- Review sales trends and provide reorder recommendations
+- Explain product performance
 
-CURRENT STORE DATA SUMMARY:
-- Total Products: {len(store_data['products'])} items in catalog
-- Inventory Records: {len(store_data['inventory'])} stock entries
-- Recent Sales: {len(store_data['recent_sales'])} transactions available
-- Forecasts: {len(store_data['forecasts'])} predictions available
+STORE SUMMARY:
+- Products: {len(store_data['products'])} items
+- Inventory: {len(store_data['inventory'])} records
+- Recent Sales: {len(store_data['recent_sales'])} transactions
+- Forecasts: {len(store_data['forecasts'])} predictions
 
-DETAILED DATA (sample):
+SAMPLE DATA:
 
 Products:
 {products_preview}
 
-Current Inventory:
+Inventory:
 {inventory_preview}
 
-Recent Sales (newest first):
+Recent Sales:
 {sales_preview}
 
-Demand Forecasts:
+Forecasts:
 {forecasts_preview}
 
-RESPONSE GUIDELINES:
-1. Be concise but thorough - provide specific numbers when available
-2. If data is empty or missing, acknowledge it and explain what data would be needed
-3. When recommending orders, consider:
-   - Current stock levels
-   - Forecast demand
-   - Typical lead times (assume 3-5 days if not specified)
-   - Safety stock (recommend 20% buffer)
-4. Use natural, conversational language
-5. If you cannot answer a question with available data, say so clearly
-6. Format lists and numbers for easy reading
+GUIDELINES:
+1. Be concise - provide specific numbers when available
+2. If data is missing, acknowledge it
+3. Use natural language
 """
+
 
 
 def format_conversation_history(history: Optional[list]) -> list:
@@ -181,7 +146,7 @@ def format_conversation_history(history: Optional[list]) -> list:
     return formatted
 
 
-async def get_chat_response(
+def get_chat_response(
     store_id: str,
     user_message: str,
     conversation_history: Optional[list] = None
