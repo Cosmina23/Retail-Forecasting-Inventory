@@ -7,8 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, RotateCcw, Bell, Package, DollarSign, Palette } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ArrowLeft, Save, RotateCcw, Bell, Package, DollarSign, Palette, Calendar, Plus, Edit, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
+import { apiService } from "@/services/api";
 
 interface AppSettings {
   // Display Settings
@@ -51,11 +55,37 @@ const defaultSettings: AppSettings = {
   defaultMarkup: 30,
 };
 
+interface Holiday {
+  id: string;
+  name: string;
+  event_type: "public_holiday" | "shopping_event" | "seasonal";
+  date: string;
+  market: string;
+  impact_level: "high" | "medium" | "low";
+  typical_demand_change?: number;
+  affected_categories: string[];
+}
+
 const Settings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // Holidays state
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [loadingHolidays, setLoadingHolidays] = useState(false);
+  const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [holidayForm, setHolidayForm] = useState<Partial<Holiday>>({
+    name: "",
+    event_type: "shopping_event",
+    date: "",
+    market: "Germany",
+    impact_level: "medium",
+    typical_demand_change: 0,
+    affected_categories: []
+  });
 
   useEffect(() => {
     const savedSettings = localStorage.getItem("appSettings");
@@ -66,7 +96,21 @@ const Settings = () => {
         setSettings(defaultSettings);
       }
     }
+    loadHolidays();
   }, []);
+
+  const loadHolidays = async () => {
+    setLoadingHolidays(true);
+    try {
+      const response = await apiService.getHolidays();
+      setHolidays(response.holidays || []);
+    } catch (error: any) {
+      console.error("Failed to load holidays:", error);
+      sonnerToast.error("Failed to load holidays");
+    } finally {
+      setLoadingHolidays(false);
+    }
+  };
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
@@ -90,6 +134,94 @@ const Settings = () => {
       title: "Settings reset",
       description: "All settings have been restored to defaults.",
     });
+  };
+
+  const handleOpenDialog = (holiday?: Holiday) => {
+    if (holiday) {
+      setEditingHoliday(holiday);
+      setHolidayForm(holiday);
+    } else {
+      setEditingHoliday(null);
+      setHolidayForm({
+        name: "",
+        event_type: "shopping_event",
+        date: "",
+        market: "Germany",
+        impact_level: "medium",
+        typical_demand_change: 0,
+        affected_categories: []
+      });
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleSaveHoliday = async () => {
+    try {
+      if (!holidayForm.name || !holidayForm.date) {
+        sonnerToast.error("Please fill in all required fields");
+        return;
+      }
+
+      // Convert date to ISO format
+      const holidayData = {
+        ...holidayForm,
+        date: new Date(holidayForm.date!).toISOString(),
+      };
+
+      if (editingHoliday) {
+        await apiService.updateHoliday(editingHoliday.id, holidayData);
+        sonnerToast.success("Holiday updated successfully");
+      } else {
+        await apiService.createHoliday(holidayData);
+        sonnerToast.success("Holiday created successfully");
+      }
+
+      setIsDialogOpen(false);
+      loadHolidays();
+    } catch (error: any) {
+      console.error("Failed to save holiday:", error);
+      sonnerToast.error(error.message || "Failed to save holiday");
+    }
+  };
+
+  const handleDeleteHoliday = async (holidayId: string) => {
+    if (!confirm("Are you sure you want to delete this holiday?")) return;
+
+    try {
+      await apiService.deleteHoliday(holidayId);
+      sonnerToast.success("Holiday deleted successfully");
+      loadHolidays();
+    } catch (error: any) {
+      console.error("Failed to delete holiday:", error);
+      sonnerToast.error(error.message || "Failed to delete holiday");
+    }
+  };
+
+  const getEventTypeLabel = (type: string) => {
+    switch (type) {
+      case "public_holiday": return "Public Holiday";
+      case "shopping_event": return "Shopping Event";
+      case "seasonal": return "Seasonal";
+      default: return type;
+    }
+  };
+
+  const getEventTypeColor = (type: string) => {
+    switch (type) {
+      case "public_holiday": return "bg-blue-500/10 text-blue-500";
+      case "shopping_event": return "bg-purple-500/10 text-purple-500";
+      case "seasonal": return "bg-green-500/10 text-green-500";
+      default: return "bg-gray-500/10 text-gray-500";
+    }
+  };
+
+  const getImpactLevelColor = (level: string) => {
+    switch (level) {
+      case "high": return "bg-red-500/10 text-red-500";
+      case "medium": return "bg-orange-500/10 text-orange-500";
+      case "low": return "bg-yellow-500/10 text-yellow-500";
+      default: return "bg-gray-500/10 text-gray-500";
+    }
   };
 
   return (
@@ -337,6 +469,194 @@ const Settings = () => {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Holidays & Events Management */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <div>
+                    <CardTitle>Holidays & Special Events</CardTitle>
+                    <CardDescription>Manage holidays and events for better forecasting</CardDescription>
+                  </div>
+                </div>
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={() => handleOpenDialog()} size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Holiday
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[525px]">
+                    <DialogHeader>
+                      <DialogTitle>{editingHoliday ? "Edit Holiday" : "Add New Holiday"}</DialogTitle>
+                      <DialogDescription>
+                        Configure holidays and events that affect sales forecasting
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="name">Event Name *</Label>
+                        <Input
+                          id="name"
+                          value={holidayForm.name}
+                          onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })}
+                          placeholder="e.g., Black Friday, Christmas"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="event_type">Event Type *</Label>
+                          <Select
+                            value={holidayForm.event_type}
+                            onValueChange={(v: any) => setHolidayForm({ ...holidayForm, event_type: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="public_holiday">Public Holiday</SelectItem>
+                              <SelectItem value="shopping_event">Shopping Event</SelectItem>
+                              <SelectItem value="seasonal">Seasonal</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="impact_level">Impact Level *</Label>
+                          <Select
+                            value={holidayForm.impact_level}
+                            onValueChange={(v: any) => setHolidayForm({ ...holidayForm, impact_level: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="low">Low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="date">Date *</Label>
+                          <Input
+                            id="date"
+                            type="date"
+                            value={holidayForm.date ? holidayForm.date.split('T')[0] : ''}
+                            onChange={(e) => setHolidayForm({ ...holidayForm, date: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="market">Market</Label>
+                          <Input
+                            id="market"
+                            value={holidayForm.market}
+                            onChange={(e) => setHolidayForm({ ...holidayForm, market: e.target.value })}
+                            placeholder="Germany"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="demand_change">Demand Change Multiplier</Label>
+                        <Input
+                          id="demand_change"
+                          type="number"
+                          step="0.1"
+                          value={holidayForm.typical_demand_change || 0}
+                          onChange={(e) => setHolidayForm({ ...holidayForm, typical_demand_change: parseFloat(e.target.value) })}
+                          placeholder="e.g., 2.0 for +100%, 0.5 for -50%"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Multiplier for demand (1.0 = no change, 2.0 = double, 0.5 = half)
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="categories">Affected Categories (comma-separated)</Label>
+                        <Input
+                          id="categories"
+                          value={holidayForm.affected_categories?.join(", ") || ""}
+                          onChange={(e) => setHolidayForm({
+                            ...holidayForm,
+                            affected_categories: e.target.value.split(",").map(c => c.trim()).filter(Boolean)
+                          })}
+                          placeholder="e.g., Electronics, Clothing, Food"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Leave empty to affect all categories
+                        </p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                      <Button onClick={handleSaveHoliday}>
+                        {editingHoliday ? "Update" : "Create"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingHolidays ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : holidays.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No holidays configured yet</p>
+                  <p className="text-sm">Add holidays to improve forecast accuracy</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {holidays.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((holiday) => (
+                    <div key={holiday.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h4 className="font-semibold">{holiday.name}</h4>
+                          <Badge className={getEventTypeColor(holiday.event_type)} variant="secondary">
+                            {getEventTypeLabel(holiday.event_type)}
+                          </Badge>
+                          <Badge className={getImpactLevelColor(holiday.impact_level)} variant="secondary">
+                            {holiday.impact_level}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>📅 {new Date(holiday.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                          <span>🌍 {holiday.market}</span>
+                          {holiday.typical_demand_change && (
+                            <span>📈 {holiday.typical_demand_change > 1 ? '+' : ''}{((holiday.typical_demand_change - 1) * 100).toFixed(0)}%</span>
+                          )}
+                          {holiday.affected_categories && holiday.affected_categories.length > 0 && (
+                            <span>🏷️ {holiday.affected_categories.join(", ")}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenDialog(holiday)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteHoliday(holiday.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

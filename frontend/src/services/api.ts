@@ -375,6 +375,42 @@ class ApiService {
       method: 'POST',
     });
   }
+
+  // Holidays endpoints
+  async getHolidays(market?: string, startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (market) params.append('market', market);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/holidays/${queryString}`);
+  }
+
+  async getHoliday(holidayId: string) {
+    return this.request(`/api/holidays/${holidayId}`);
+  }
+
+  async createHoliday(holiday: any) {
+    return this.request('/api/holidays/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(holiday),
+    });
+  }
+
+  async updateHoliday(holidayId: string, holiday: any) {
+    return this.request(`/api/holidays/${holidayId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(holiday),
+    });
+  }
+
+  async deleteHoliday(holidayId: string) {
+    return this.request(`/api/holidays/${holidayId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const apiService = new ApiService();

@@ -22,7 +22,8 @@ from routers import (
     purchase_orders, 
     activity, 
     notifications,
-    activity_logs
+    activity_logs,
+    holidays
 )
 
 # Încărcare variabile de mediu
@@ -84,6 +85,7 @@ app.include_router(forecasting.router, prefix="/api/forecasting", tags=["Forecas
 app.include_router(purchase_orders.router, prefix="/api/purchase-orders", tags=["Purchase Orders"])
 app.include_router(activity.router, prefix="/api", tags=["Activity"])
 app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
+app.include_router(holidays.router)
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 app.include_router(activity_logs.router)
 
