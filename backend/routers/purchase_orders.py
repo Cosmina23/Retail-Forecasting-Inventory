@@ -314,6 +314,125 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
     
     return PurchaseOrderResponse(**po_data)
 
+@router.post("/generate-from-forecast")
+async def generate_from_forecast(
+    store_id: str,
+    supplier: str,
+    notes: Optional[str] = None
+):
+    """
+    Auto-generate PO from latest AI forecast (includes seasonality & holidays)
+    Uses the most recent forecast saved in the database
+    """
+    
+    try:
+        print(f"📊 Looking for latest forecast for store {store_id}")
+        
+        # Import collections
+        from database import products_collection, forecasts_collection
+        from bson import ObjectId
+        
+        # Find the most recent forecast for this store
+        latest_forecast = forecasts_collection.find_one(
+            {"store_id": str(store_id)},
+            sort=[("forecast_date", -1)]
+        )
+        
+        if not latest_forecast:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No forecast found for store {store_id}. Please generate a forecast first in the Forecasting page."
+            )
+        
+        forecast_date = latest_forecast.get("forecast_date")
+        forecast_days = latest_forecast.get("forecast_period_days", 7)
+        products = latest_forecast.get("products", [])
+        
+        print(f"✅ Found forecast from {forecast_date} ({forecast_days} days, {len(products)} products)")
+        print(f"   Using forecast ID: {latest_forecast.get('_id')}")
+        print(f"   Forecast created at: {latest_forecast.get('created_at')}")
+        
+        if not products:
+            return {
+                "message": "Forecast exists but contains no products.",
+                "store_id": store_id,
+                "forecast_date": forecast_date
+            }
+        
+        # Generate PO items based on forecast recommendations
+        items = []
+        
+        print(f"📋 Processing {len(products)} products from forecast:")
+        for product_data in products:
+            product_identifier = product_data.get("product", "Unknown Product")
+            total_forecast = product_data.get("total_forecast", 0)
+            current_stock = product_data.get("current_stock", 0)
+            recommended_order = product_data.get("recommended_order", 0)
+            
+            print(f"  • {product_identifier}: forecast={total_forecast}, stock={current_stock}, recommended={recommended_order}")
+            
+            # Only include products that need ordering
+            if recommended_order > 0:
+                category = product_data.get("category", "Unknown")
+                
+                # Try to get product info from products collection
+                product_name = product_identifier
+                unit_price = 10.0
+                try:
+                    # Try to find product by ID first
+                    product_doc = None
+                    if ObjectId.is_valid(product_identifier):
+                        product_doc = products_collection.find_one({"_id": ObjectId(product_identifier)})
+                    
+                    # If not found by ID, try by name
+                    if not product_doc:
+                        product_doc = products_collection.find_one({"name": product_identifier})
+                    
+                    if product_doc:
+                        # Use the actual product name from database
+                        product_name = product_doc.get('name', product_identifier)
+                        unit_price = float(product_doc.get('price', 10.0))
+                    else:
+                        print(f"⚠️ Product not found in database: {product_identifier}")
+                except Exception as e:
+                    print(f"⚠️ Could not get product info for {product_identifier}: {e}")
+                
+                items.append(PurchaseOrderItem(
+                    product_name=product_name,
+                    category=category,
+                    quantity=int(recommended_order),
+                    unit_price=unit_price
+                ))
+        
+        if not items:
+            return {
+                "message": "No items need reordering according to the forecast. All inventory levels are sufficient for the forecasted demand.",
+                "store_id": store_id,
+                "forecast_date": forecast_date,
+                "products_checked": len(products)
+            }
+        
+        print(f"📦 Generated {len(items)} items to order based on AI forecast")
+        
+        # Generate PO with the forecast-based items
+        po_request = PurchaseOrderRequest(
+            store_id=store_id,
+            supplier=supplier,
+            items=items,
+            notes=notes or f"AI-generiert basierend auf Forecast vom {forecast_date.strftime('%d.%m.%Y')} (inkl. Saisonalität & Feiertage)"
+        )
+        
+        return await generate_purchase_order(po_request)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in auto-generate from forecast: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating PO from forecast: {str(e)}")
+
+
 @router.post("/generate-from-recommendations")
 async def generate_from_recommendations(
     store_id: str,
@@ -321,6 +440,7 @@ async def generate_from_recommendations(
     notes: Optional[str] = None
 ):
     """
+    DEPRECATED: Use /generate-from-forecast instead
     Auto-generate PO from inventory optimization recommendations
     Now uses MongoDB data instead of CSV files
     """

@@ -301,6 +301,19 @@ class ApiService {
       method: 'POST',
     });
   }
+
+  async generatePurchaseOrderFromForecast(storeId: string, supplier: string, notes?: string) {
+    const params = new URLSearchParams({
+      store_id: storeId,
+      supplier: supplier,
+    });
+    if (notes) params.append('notes', notes);
+    
+    return this.request(`/api/purchase-orders/generate-from-forecast?${params}`, {
+      method: 'POST',
+    });
+  }
+
   async importProducts(file: File,store_id:string) {
     const formData = new FormData();
     formData.append('file', file);

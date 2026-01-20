@@ -288,10 +288,10 @@ const PurchaseOrders = () => {
 
     setLoading(true);
     try {
-      const po = await apiService.generatePurchaseOrderFromRecommendations(
+      const po = await apiService.generatePurchaseOrderFromForecast(
         selectedStore,
         selectedSupplier,
-        notes || "Auto-generiert basierend auf Lagerbestandsempfehlungen"
+        notes || "AI-generiert basierend auf Forecast (inkl. Saisonalität & Feiertage)"
       );
       setGeneratedPO(po);
       
@@ -310,17 +310,18 @@ const PurchaseOrders = () => {
       await logActivity(
         selectedStore,
         "purchase_order_created",
-        `Auto-generated purchase order ${po.po_number}`,
+        `AI-generated purchase order ${po.po_number} from forecast`,
         {
           po_number: po.po_number,
           supplier: selectedSupplier,
           items_count: po.items.length,
           total_cost: po.total_cost,
           auto_generated: true,
+          generated_from: "forecast",
         }
       );
       
-      toast.success("Purchase order auto-generated from inventory!");
+      toast.success("Purchase order generated from AI forecast!");
     } catch (error: any) {
       console.error("Failed to auto-generate PO:", error);
       toast.error(error.message || "Failed to auto-generate purchase order");
@@ -564,7 +565,7 @@ const PurchaseOrders = () => {
                   size="lg"
                 >
                   <ShoppingCart className="w-4 h-4 mr-2" />
-                  Auto-Generate from Inventory
+                  Generate from AI Forecast
                 </Button>
 
                 <div>
