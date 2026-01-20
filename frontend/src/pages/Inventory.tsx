@@ -11,6 +11,7 @@ import { apiService } from "@/services/api";
 import { toast } from "sonner";
 import { useToast } from "@/hooks/use-toast";
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { logActivity} from "@/services/activityLogger";
 
 interface InventoryMetric {
   product: string;
@@ -54,6 +55,21 @@ const Inventory = () => {
     try {
       const response = await apiService.getInventoryOptimization(storeId, lTime, sLevel);
       setData(response);
+
+      // Log the activity
+      await logActivity(
+        storeId,
+        "inventory_optimized",
+        `Optimized inventory with ${lTime} day lead time and ${(sLevel * 100).toFixed(0)}% service level`,
+        {
+          lead_time_days: lTime,
+          service_level: sLevel,
+          total_products: response.total_products,
+          critical_items: response.metrics.filter((m: InventoryMetric) => m.status === "Critical" || m.status === "Low - Order Now").length,
+          total_annual_revenue: response.total_annual_revenue,
+        }
+      );
+
     } catch (error: any) {
       console.error("Failed to optimize inventory:", error);
       toast.error(error.message || "Failed to generate optimization data");

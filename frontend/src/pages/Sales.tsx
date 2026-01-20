@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Package } from "lucide-react";
 import apiService from "@/services/api";
+import {logActivity} from "@/services/activityLogger.ts";
 
 const Sales = () => {
   const { toast } = useToast();
@@ -63,6 +64,22 @@ const Sales = () => {
       const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
       toast({ title: "Success!", description: `Imported ${imported} sales successfully${errorCount ? `, ${errorCount} rows had issues` : ""}` });
       // refresh
+
+      // Log the activity
+      if (store) {
+        await logActivity(
+          store,
+          "data_imported",
+          `Imported ${imported} sales records from ${uploadFile.name}`,
+          {
+            file_name: uploadFile.name,
+            records_imported: imported,
+            errors_count: errorCount,
+            file_size: uploadFile.size,
+          }
+        );
+      }
+
       fetchSales(1);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload failed", description: error.message || "Could not upload file" });

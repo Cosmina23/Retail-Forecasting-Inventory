@@ -5,14 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2670b04c-5e74-43c9-a7fc-d90ddee9dbc6" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/frontend/src/pages/Chat.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/services/chat.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/services/chat.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/services/chatbot.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/services/chatbot.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/layouts/DashboardLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/layouts/DashboardLayout.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Dashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Dashboard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Inventory.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Inventory.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/PurchaseOrders.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/PurchaseOrders.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Sales.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Sales.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -110,7 +106,7 @@
       <workItem from="1767698355694" duration="6569000" />
       <workItem from="1767710459562" duration="657000" />
       <workItem from="1768900427585" duration="372000" />
-      <workItem from="1768900974326" duration="1594000" />
+      <workItem from="1768900974326" duration="4399000" />
     </task>
     <servers />
   </component>
