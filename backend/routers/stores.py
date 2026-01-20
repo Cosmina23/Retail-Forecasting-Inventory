@@ -142,8 +142,8 @@ async def get_store_metrics(store_id: str, offset: int = 0, current_user: dict =
                     "top_categories": [], "inventory_data": []}
 
         anchor_date = latest_sale["sale_date"]
-        view_end = anchor_date + timedelta(days=1)
-        view_start = view_end - timedelta(days=7 * (offset + 1))
+        view_end = (anchor_date + timedelta(days=1)) - timedelta(days=7 * offset)
+        view_start = view_end - timedelta(days=7)
 
         # 2. Pipeline Vânzări (Top Categories)
         sales_pipeline = [
