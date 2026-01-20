@@ -357,8 +357,8 @@ async def predict_forecast(request: ForecastRequest):
             recommended_order = max(0, int(total_forecast) + safety_buffer - current_stock)
             
             # Estimate revenue (mock prices)
-            avg_price = 50 if category == "Electronics" else 30 if category == "Clothing" else 5
-            total_revenue += total_forecast * avg_price
+            product_price = prod_info.get("price", 5.0)  # Ia prețul real din DB
+            total_revenue += total_forecast * product_price
             
             product_forecasts.append(ProductForecast(
                 product=product,

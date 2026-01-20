@@ -27,6 +27,7 @@ import {
 } from "recharts";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 // --- INTERFEȚE DATE ---
 interface SalePoint {
@@ -112,9 +113,9 @@ const Dashboard = () => {
       // Construim URL-ul pentru forecast cu filtrul de categorie
       const forecastUrl = `${base}/stores/${id}/sales-forecast?offset=${offset}${category ? `&category=${encodeURIComponent(category)}` : ''}`;
 
-      const [sfRes, iRes, mRes] = await Promise.all([
+      // Am eliminat iRes separat, deoarece metrics ne aduce acum inventory_data procesat
+      const [sfRes, mRes] = await Promise.all([
         fetch(forecastUrl, { headers }),
-        fetch(`${base}/inventory?store_id=${id}`, { headers }),
         fetch(`${base}/stores/${id}/metrics?offset=${offset}`, { headers })
       ]);
 
@@ -124,7 +125,7 @@ const Dashboard = () => {
         setSalesData(data.length ? data : fallbackSales());
       }
 
-      // 2. Procesare Metrics & Categories
+      // 2. Procesare Metrics, Categories & Pie Chart Data
       if (mRes.ok) {
         const m = await mRes.json();
         setMaxOffset(m.max_offset || 0);
@@ -134,14 +135,12 @@ const Dashboard = () => {
           {
             label: offset === 0 ? "Weekly Revenue" : "Revenue (Historical)",
             value: formatCurrency(m.weekly_revenue ?? 0),
-            change: m.revenue_change ? `${m.revenue_change}%` : "0%",
             positive: (m.revenue_change || 0) >= 0,
             icon: Euro,
           },
           {
             label: offset === 0 ? "Weekly Orders" : "Orders (Historical)",
             value: String(m.orders ?? 0),
-            change: m.orders_change ? `${m.orders_change}%` : "0%",
             positive: (m.orders_change || 0) >= 0,
             icon: ShoppingCart,
           },
@@ -158,22 +157,15 @@ const Dashboard = () => {
             icon: AlertTriangle,
           }
         ]);
-      }
 
-      // 3. Procesare Inventory Pie Chart
-      if (iRes.ok) {
-        const inv = await iRes.json();
-        const cats = inv.reduce((acc: any, item: any) => {
-          const c = item.category || 'Other';
-          acc[c] = (acc[c] || 0) + (item.stock_quantity || 0);
-          return acc;
-        }, {});
-
-        setInventoryData(Object.keys(cats).map((name, i) => ({
-          name,
-          value: cats[name],
-          color: `hsl(var(--chart-${(i % 5) + 1}))`
-        })));
+        // REPARĂM PIE CHART: Folosim datele procesate din Backend (cu Join)
+        if (m.inventory_data) {
+          setInventoryData(m.inventory_data.map((item: any, i: number) => ({
+            name: item.name,
+            value: item.value,
+            color: `hsl(var(--chart-${(i % 5) + 1}))`
+          })));
+        }
       }
     } catch (e) {
       console.error("Fetch error:", e);
@@ -359,32 +351,49 @@ const Dashboard = () => {
           <CardContent className="space-y-6 pt-6 pb-8">
             {topCategories.length > 0 ? topCategories.map((cat, i) => (
               <div
-                key={cat.name}
-                className="group cursor-default"
-              >
-                <div className="flex items-center justify-between mb-2">
+                  key={cat.name}
+                  className={cn(
+                    "group cursor-pointer p-3 rounded-2xl transition-all duration-200 border border-transparent",
+                    selectedCategory === cat.name
+                      ? "bg-blue-50/50 border-blue-100 shadow-sm"
+                      : "hover:bg-slate-50/80"
+                  )}
+                  onClick={() => {
+                    // Logică de toggle: dacă e deja selectată, o deselectăm (null). Altfel, o setăm.
+                    setSelectedCategory(selectedCategory === cat.name ? null : cat.name);
+                  }}
+                >
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-3 h-3 rounded-full"
+                      className={cn(
+                        "w-3.5 h-3.5 rounded-full shadow-sm transition-transform duration-300",
+                        selectedCategory === cat.name ? "scale-125" : "group-hover:scale-110"
+                      )}
                       style={{ backgroundColor: `hsl(var(--chart-${(i % 5) + 1}))` }}
                     />
-                    <span className="font-bold text-sm tracking-tight text-slate-700">
+                    <span className={cn(
+                        "font-bold text-sm tracking-tight transition-colors",
+                        selectedCategory === cat.name ? "text-blue-700" : "text-slate-700"
+                      )}>
                       {cat.name}
                     </span>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-black text-slate-900">{formatCurrency(cat.amount)}</span>
-                    <span className="text-xs font-bold text-slate-500 w-10 text-right">{cat.percentage}%</span>
+                    <span className="text-xs font-bold text-slate-400 w-10 text-right">{cat.percentage}%</span>
                   </div>
                 </div>
-                {/* Bara de progres pe fundal alb */}
-                <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner border border-slate-200">
+                {/* Bara de progres */}
+                <div className="h-2 w-full bg-slate-100/80 rounded-full overflow-hidden border border-slate-100">
                   <div
                     className="h-full rounded-full transition-all duration-1000 cubic-bezier(0.4, 0, 0.2, 1)"
                     style={{
                       width: `${cat.percentage}%`,
                       backgroundColor: `hsl(var(--chart-${(i % 5) + 1}))`,
-                      boxShadow: `0 0 15px hsl(var(--chart-${(i % 5) + 1}), 0.3)`
+                      boxShadow: selectedCategory === cat.name
+                        ? `0 0 12px hsl(var(--chart-${(i % 5) + 1}), 0.5)`
+                        : `0 0 8px hsl(var(--chart-${(i % 5) + 1}), 0.2)`
                     }}
                   />
                 </div>

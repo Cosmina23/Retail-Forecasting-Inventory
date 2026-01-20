@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from bson import ObjectId
 from bson.errors import InvalidId
 from collections import defaultdict
+import traceback
+from dateutil import parser
 
 # Modele și Auth
 from models import Store, StoreCreate
@@ -49,6 +51,23 @@ def get_uid(current_user):
         return current_user.get("_id")
     return current_user
 
+
+def get_anchor_date(store_id):
+    # Căutăm cea mai recentă vânzare
+    latest_sale = sales_collection.find_one({"store_id": store_id}, sort=[("sale_date", -1)])
+    # Căutăm cea mai recentă prognoză
+    latest_forecast = db["forecasts"].find_one({"store_id": store_id}, sort=[("forecast_date", -1)])
+
+    dates = []
+    if latest_sale:
+        dt = latest_sale.get("sale_date") or latest_sale.get("date")
+        dates.append(dt if isinstance(dt, datetime) else parser.parse(str(dt)))
+    if latest_forecast:
+        dt = latest_forecast.get("forecast_date")
+        dates.append(dt if isinstance(dt, datetime) else parser.parse(str(dt)))
+
+    # Dacă nu avem nicio dată, folosim data curentă ca fallback
+    return max(dates) if dates else datetime.utcnow()
 
 # --- Endpoints ---
 
@@ -116,112 +135,166 @@ async def get_store(store_id: str):
 @router.get("/{store_id}/metrics")
 async def get_store_metrics(store_id: str, offset: int = 0, current_user: dict = Depends(get_current_user)):
     try:
-        store = stores_collection.find_one({"_id": ObjectId(store_id)})
-        uid = get_uid(current_user)
-        if str(store.get("user_id")) != str(uid): raise HTTPException(status_code=403)
+        # 1. Identificăm ancora de timp
+        latest_sale = sales_collection.find_one({"store_id": store_id}, sort=[("sale_date", -1)])
+        if not latest_sale:
+            return {"weekly_revenue": 0, "orders": 0, "stock_level": 0, "critical_items": 0, "max_offset": 0,
+                    "top_categories": [], "inventory_data": []}
 
-        now = datetime.utcnow()
-        # Calcul Max Offset
-        oldest_doc = sales_collection.find_one({"store_id": store_id}, sort=[("date", 1)])
-        max_offset = int((now - oldest_doc["date"]).total_seconds() // (7 * 24 * 3600)) if oldest_doc else 0
+        anchor_date = latest_sale["sale_date"]
+        view_end = anchor_date + timedelta(days=1)
+        view_start = view_end - timedelta(days=7 * (offset + 1))
 
-        # Intervale timp
-        view_end = now - timedelta(days=7 * offset)
-        view_start = view_end - timedelta(days=7)
-        comp_start = view_start - timedelta(days=7)
+        # 2. Pipeline Vânzări (Top Categories)
+        sales_pipeline = [
+            {"$match": {"store_id": store_id, "sale_date": {"$gte": view_start, "$lt": view_end}}},
+            {
+                "$lookup": {
+                    "from": "products",
+                    "let": {"pid": "$product_id"},
+                    "pipeline": [{"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$pid"]}}}],
+                    "as": "product_info"
+                }
+            },
+            {"$unwind": "$product_info"},
+            {"$group": {"_id": "$product_info.category", "amount": {"$sum": "$total_amount"}}}
+        ]
+        category_data = list(sales_collection.aggregate(sales_pipeline))
+        total_revenue = sum(item["amount"] for item in category_data)
 
-        # Sales queries
-        curr_sales = list(sales_collection.find({"store_id": store_id, "date": {"$gte": view_start, "$lt": view_end}}))
-        past_sales = list(
-            sales_collection.find({"store_id": store_id, "date": {"$gte": comp_start, "$lt": view_start}}))
+        # 3. Pipeline Inventar (Fără Group inițial pentru a păstra detaliile produselor)
+        # Avem nevoie de detalii pentru Critical Items și de categorii pentru Pie Chart
+        inv_full_pipeline = [
+            {"$match": {"store_id": store_id}},
+            {
+                "$lookup": {
+                    "from": "products",
+                    "let": {"pid": "$product_id"},
+                    "pipeline": [{"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$pid"]}}}],
+                    "as": "product_info"
+                }
+            },
+            {"$unwind": "$product_info"}
+        ]
 
-        # Metrics calculation
-        curr_rev = sum(s.get("quantity", 0) * s.get("price", 0) for s in curr_sales)
-        past_rev = sum(s.get("quantity", 0) * s.get("price", 0) for s in past_sales)
-        rev_chg = round(((curr_rev - past_rev) / past_rev * 100), 1) if past_rev > 0 else 0
+        # Luăm toate documentele de inventar "îmbogățite" cu info despre produs
+        full_inventory = list(db["inventory"].aggregate(inv_full_pipeline))
 
-        # Categoriile cele mai vandute (Stil Screen Time)
-        cat_map = defaultdict(float)
-        for s in curr_sales:
-            cat = s.get("category", "Other")
-            cat_map[cat] += s.get("quantity", 0) * s.get("price", 0)
+        # Calculăm cifrele brute
+        total_stock = sum(d.get("quantity", 0) for d in full_inventory)
+        critical_items = sum(1 for d in full_inventory if d.get("quantity", 0) <= d.get("reorder_point", 0))
 
-        top_cats = sorted(
-            [{"name": k, "amount": round(v, 2), "percentage": round(v / curr_rev * 100, 1) if curr_rev > 0 else 0}
-             for k, v in cat_map.items()], key=lambda x: x["amount"], reverse=True)
+        # Agregăm manual categoriile pentru Pie Chart (Inventory Split)
+        cat_counts = {}
+        for d in full_inventory:
+            cat = d["product_info"].get("category", "Uncategorized")
+            cat_counts[cat] = cat_counts.get(cat, 0) + d.get("quantity", 0)
 
-        # Inventory counts
-        inv = list(inventory_collection.find({"store_id": store_id}))
-        total_stock = sum(i.get("stock_quantity") or i.get("quantity") or 0 for i in inv)
-        critical = sum(1 for i in inv if (i.get("stock_quantity") or 0) <= (i.get("reorder_level") or 10))
+        formatted_inventory_data = [
+            {"name": k, "value": v} for k, v in cat_counts.items()
+        ]
 
         return {
-            "weekly_revenue": round(curr_rev, 2),
-            "revenue_change": rev_chg,
-            "orders": len(curr_sales),
-            "orders_change": round(((len(curr_sales) - len(past_sales)) / len(past_sales) * 100), 1) if len(
-                past_sales) > 0 else 0,
+            "weekly_revenue": round(total_revenue, 2),
+            "orders": len(list(
+                sales_collection.find({"store_id": store_id, "sale_date": {"$gte": view_start, "$lt": view_end}}))),
             "stock_level": total_stock,
-            "critical_items": critical,
-            "max_offset": max_offset,
-            "top_categories": top_cats[:5]  # Primele 5 cele mai vandute
+            "critical_items": critical_items,
+            "max_offset": 52,
+            "top_categories": sorted([{"name": i["_id"], "amount": i["amount"]} for i in category_data],
+                                     key=lambda x: x["amount"], reverse=True)[:5],
+            "inventory_data": formatted_inventory_data  # <-- FOARTE IMPORTANT: Trebuie returnat!
         }
     except Exception as e:
+        print(f"Error in metrics: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{store_id}/sales-forecast")
-async def get_store_sales_forecast(store_id: str, offset: int = 0, current_user: dict = Depends(get_current_user)):
-    """Date istorice vs Forecast raportate la offset-ul de timp selectat."""
+async def get_store_sales_forecast(
+        store_id: str,
+        offset: int = 0,
+        category: Optional[str] = None,
+        current_user: dict = Depends(get_current_user)
+):
     try:
-        if not ObjectId.is_valid(store_id):
-            raise HTTPException(status_code=400, detail="Invalid ID")
+        # 1. Determinăm ancora dinamică
+        anchor_date = get_anchor_date(store_id)
 
-        store = stores_collection.find_one({"_id": ObjectId(store_id)})
-        uid = get_uid(current_user)
-
-        if not store or str(store.get("user_id")) != str(uid):
-            raise HTTPException(status_code=403, detail="Unauthorized")
-
-        # Calculăm intervalul bazat pe offset
-        now = datetime.utcnow()
+        # Ne asigurăm că graficul se termină la finalul săptămânii celei mai recente
+        now = anchor_date + timedelta(days=1)
         view_end = now - timedelta(days=7 * offset)
         view_start = view_end - timedelta(days=7)
 
-        # Preluare date din baza de date
-        sales_data = list(sales_collection.find({
-            "store_id": store_id,
-            "date": {"$gte": view_start, "$lt": view_end}
-        }))
-        forecast_data = list(db["forecasts"].find({
-            "store_id": store_id,
-            "forecast_date": {"$gte": view_start, "$lt": view_end}
-        }))
+        # 2. Pipeline Vânzări Reale (cu filtrare pe categorie)
+        sales_pipeline = [
+            {"$match": {"store_id": store_id, "$or": [
+                {"sale_date": {"$gte": view_start, "$lt": view_end}},
+                {"date": {"$gte": view_start, "$lt": view_end}}
+            ]}},
+            {"$lookup": {
+                "from": "products",
+                "let": {"pid": "$product_id"},
+                "pipeline": [{"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$pid"]}}}],
+                "as": "product_info"
+            }},
+            {"$unwind": "$product_info"}
+        ]
+        if category:
+            sales_pipeline.append({"$match": {"product_info.category": category}})
 
+        sales_docs = list(sales_collection.aggregate(sales_pipeline))
         sales_map = defaultdict(float)
-        for s in sales_data:
-            dt = s.get("date")
-            d_obj = dt if isinstance(dt, datetime) else datetime.fromisoformat(str(dt).replace('Z', '+00:00'))
-            sales_map[d_obj.strftime("%b %d")] += s.get("quantity", 0) * s.get("price", 0)
+        for s in sales_docs:
+            dt = s.get("sale_date") or s.get("date")
+            d_obj = dt if isinstance(dt, datetime) else parser.parse(str(dt))
+            sales_map[d_obj.strftime("%b %d")] += float(s.get("total_amount", 0))
 
-        forecast_map = defaultdict(float)
-        for f in forecast_data:
-            dt = f.get("forecast_date")
-            d_obj = dt if isinstance(dt, datetime) else datetime.fromisoformat(str(dt).replace('Z', '+00:00'))
-            val = f.get("forecast_value") or (f.get("forecast_demand", 0) * f.get("price", 0))
-            forecast_map[d_obj.strftime("%b %d")] += val
+        # 3. Procesare Forecast Batch (7 zile)
+        # Căutăm documentul care se suprapune cu fereastra vizualizată
+        forecast_doc = db["forecasts"].find_one({
+            "store_id": store_id,
+            "forecast_date": {"$gte": view_start - timedelta(days=7), "$lt": view_end}
+        })
 
+        daily_forecast_val = 0
+        if forecast_doc:
+            if category:
+                # Filtrăm produsele din array-ul de 380 de itemi
+                cat_products = list(db["products"].find({"category": category}, {"_id": 1}))
+                cat_ids = {str(p["_id"]) for p in cat_products}
+
+                total_cat_rev = sum(
+                    p.get("revenue_forecast", 0)
+                    for p in forecast_doc.get("products", [])
+                    if str(p.get("product_id")) in cat_ids
+                )
+                daily_forecast_val = total_cat_rev / forecast_doc.get("forecast_period_days", 7)
+            else:
+                # total_revenue_forecast: 575340
+                daily_forecast_val = forecast_doc.get("total_revenue_forecast", 0) / 7
+
+        # 4. Generare rezultat pentru 7 zile
         result = []
-        # Generăm cele 7 zile ale ferestrei selectate
         for i in range(7, 0, -1):
-            # i + (offset * 7) ne dă data corectă în trecut
             day = now - timedelta(days=i + (offset * 7))
             key = day.strftime("%b %d")
+
+            # Verificăm dacă prognoza este validă pentru această zi specifică
+            current_day_forecast = 0
+            if forecast_doc:
+                f_start = forecast_doc["forecast_date"]
+                f_start = f_start if isinstance(f_start, datetime) else parser.parse(f_start)
+                f_end = f_start + timedelta(days=forecast_doc.get("forecast_period_days", 7))
+                if f_start <= day < f_end:
+                    current_day_forecast = daily_forecast_val
+
             result.append({
                 "date": key,
                 "actual": round(sales_map.get(key, 0), 2),
-                "forecast": round(forecast_map.get(key, 0), 2)
+                "forecast": round(current_day_forecast, 2)
             })
+
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
