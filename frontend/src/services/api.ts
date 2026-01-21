@@ -301,6 +301,20 @@ class ApiService {
       method: 'POST',
     });
   }
+
+  async generatePurchaseOrderFromForecast(storeId: string, supplier: string, notes?: string, forecastDays: number = 7) {
+    const params = new URLSearchParams({
+      store_id: storeId,
+      supplier: supplier,
+      forecast_days: forecastDays.toString(),
+    });
+    if (notes) params.append('notes', notes);
+    
+    return this.request(`/api/purchase-orders/generate-from-forecast?${params}`, {
+      method: 'POST',
+    });
+  }
+
   async importProducts(file: File,store_id:string) {
     const formData = new FormData();
     formData.append('file', file);
@@ -373,6 +387,42 @@ class ApiService {
     const params = storeId ? `?store_id=${storeId}` : '';
     return this.request(`/api/notifications/read-all${params}`, {
       method: 'POST',
+    });
+  }
+
+  // Holidays endpoints
+  async getHolidays(market?: string, startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (market) params.append('market', market);
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/holidays/${queryString}`);
+  }
+
+  async getHoliday(holidayId: string) {
+    return this.request(`/api/holidays/${holidayId}`);
+  }
+
+  async createHoliday(holiday: any) {
+    return this.request('/api/holidays/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(holiday),
+    });
+  }
+
+  async updateHoliday(holidayId: string, holiday: any) {
+    return this.request(`/api/holidays/${holidayId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(holiday),
+    });
+  }
+
+  async deleteHoliday(holidayId: string) {
+    return this.request(`/api/holidays/${holidayId}`, {
+      method: 'DELETE',
     });
   }
 }

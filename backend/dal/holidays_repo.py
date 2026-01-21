@@ -113,7 +113,7 @@ def update_holiday(holiday_id: str, updates: Dict[str, Any]) -> Optional[Dict[st
     """
     Update a holiday record and return the sanitized updated document.
     
-    Allows updating: name, impact_level, typical_demand_change, affected_categories
+    Allows updating: name, event_type, date, market, impact_level, typical_demand_change, affected_categories
     Returns None if not found.
     """
     if not _is_valid_object_id(holiday_id):
@@ -121,6 +121,9 @@ def update_holiday(holiday_id: str, updates: Dict[str, Any]) -> Optional[Dict[st
 
     allowed_fields = {
         "name",
+        "event_type",
+        "date",
+        "market",
         "impact_level",
         "typical_demand_change",
         "affected_categories",

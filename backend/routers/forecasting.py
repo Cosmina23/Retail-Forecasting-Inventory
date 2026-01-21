@@ -8,7 +8,8 @@ import holidays
 from pathlib import Path
 from datetime import datetime, timedelta
 from dal.products_repo import get_product_by_id
-from database import db, sales_collection, inventory_collection, products_collection, stores_collection, forecasts_collection
+from dal.holidays_repo import get_holidays_by_market_and_date_range
+from database import db, sales_collection, inventory_collection, products_collection, stores_collection, forecasts_collection, holidays_collection
 from models import ForecastRequest, ForecastResponse, ProductForecast
 
 router = APIRouter()
@@ -43,9 +44,117 @@ except Exception as e:
     model = None
 
 
+def get_season(date: datetime) -> str:
+    """
+    Determine the season based on the date (Northern Hemisphere)
+    """
+    month = date.month
+    if month in [3, 4, 5]:
+        return "spring"
+    elif month in [6, 7, 8]:
+        return "summer"
+    elif month in [9, 10, 11]:
+        return "autumn"
+    else:  # 12, 1, 2
+        return "winter"
+
+
+def get_category_season_multiplier(category: str, season: str) -> float:
+    """
+    Return a demand multiplier based on category and season
+    This helps predict seasonal variations in product demand
+    """
+    # Define seasonal patterns for different categories
+    seasonal_patterns = {
+        "Clothing": {
+            "winter": {
+                "coats": 2.5, "jackets": 2.0, "sweaters": 2.0, "jeans": 1.3,
+                "hoodies": 1.8, "blazers": 1.5, "default": 1.2
+            },
+            "summer": {
+                "t-shirts": 2.0, "shorts": 2.0, "tank tops": 1.8, "sandals": 1.8,
+                "swimwear": 2.5, "default": 0.8
+            },
+            "spring": {
+                "jackets": 1.3, "t-shirts": 1.4, "jeans": 1.2, "default": 1.0
+            },
+            "autumn": {
+                "jackets": 1.5, "sweaters": 1.5, "jeans": 1.3, "default": 1.1
+            }
+        },
+        "Food": {
+            "winter": {"soup": 1.8, "hot beverages": 1.6, "comfort food": 1.5, "default": 1.0},
+            "summer": {"ice cream": 2.5, "salads": 1.6, "cold drinks": 2.0, "default": 1.0},
+            "spring": {"fresh produce": 1.3, "default": 1.0},
+            "autumn": {"pumpkin": 2.0, "default": 1.0}
+        },
+        "Electronics": {
+            # Electronics less affected by season, but some patterns exist
+            "winter": {"heaters": 3.0, "default": 0.95},
+            "summer": {"fans": 3.0, "air conditioning": 2.5, "default": 0.95},
+            "spring": {"default": 1.0},
+            "autumn": {"default": 1.0}
+        }
+    }
+    
+    # Get category pattern
+    if category not in seasonal_patterns:
+        return 1.0  # No seasonal adjustment for unknown categories
+    
+    season_pattern = seasonal_patterns[category].get(season, {})
+    
+    # Default multiplier for the season
+    return season_pattern.get("default", 1.0)
+
+
+def get_holiday_impact(date: datetime, category: str, holidays_data: List[Dict]) -> float:
+    """
+    Calculate demand multiplier based on holidays and events
+    """
+    multiplier = 1.0
+    
+    for holiday in holidays_data:
+        holiday_date = holiday.get("date")
+        if isinstance(holiday_date, str):
+            holiday_date = datetime.fromisoformat(holiday_date.replace('Z', '+00:00'))
+        
+        # Check if date is within 3 days of the holiday (before or after)
+        if holiday_date and abs((date - holiday_date).days) <= 3:
+            impact_level = holiday.get("impact_level", "low")
+            event_type = holiday.get("event_type", "public_holiday")
+            affected_categories = holiday.get("affected_categories", [])
+            typical_change = holiday.get("typical_demand_change", 0)
+            
+            # If category is affected or no specific categories listed
+            if not affected_categories or category in affected_categories:
+                # Impact multipliers based on level and type
+                if event_type == "shopping_event":
+                    if impact_level == "high":
+                        multiplier *= 2.5
+                    elif impact_level == "medium":
+                        multiplier *= 1.8
+                    else:
+                        multiplier *= 1.3
+                elif event_type == "public_holiday":
+                    if impact_level == "high":
+                        multiplier *= 1.5
+                    elif impact_level == "medium":
+                        multiplier *= 1.2
+                    else:
+                        multiplier *= 1.1
+                elif event_type == "seasonal":
+                    if typical_change:
+                        multiplier *= (1 + typical_change)
+                    else:
+                        multiplier *= 1.2
+    
+    return multiplier
+
+
 def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecast_days: int = 7) -> pd.DataFrame:
     """
     Create features for forecasting next N days
+    Enhanced with seasonality and holiday impact
     """
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
@@ -64,6 +173,9 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
     if not store_doc:
         raise HTTPException(status_code=404, detail=f"Store {store_id} not found in database")
     
+    # Get store market/region for holiday lookup (default to 'Germany')
+    store_market = store_doc.get("market", "Germany")
+    
     # Use the store_id_map if available for encoding, otherwise use a fallback
     store_code = None
     if store_id_str in store_id_map:
@@ -80,12 +192,26 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
             store_code = 1
             print(f"⚠️ No store encoding available, using default: {store_code}")
     
-    # Get German holidays
+    # Get German holidays (standard holidays)
     de_holidays = holidays.Germany()
     
     # Start from tomorrow
     start_date = datetime.now().date() + timedelta(days=1)
+    end_date = start_date + timedelta(days=forecast_days)
     forecast_dates = [start_date + timedelta(days=i) for i in range(forecast_days)]
+    
+    # Fetch custom holidays/events from database for the forecast period
+    try:
+        custom_holidays = get_holidays_by_market_and_date_range(
+            market=store_market,
+            start_date=datetime.combine(start_date, datetime.min.time()),
+            end_date=datetime.combine(end_date, datetime.min.time()),
+            limit=100
+        )
+        print(f"✅ Found {len(custom_holidays)} custom holidays/events for {store_market}")
+    except Exception as e:
+        print(f"⚠️ Could not load custom holidays: {e}")
+        custom_holidays = []
     
     forecast_rows = []
     
@@ -132,6 +258,16 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
             is_holiday = 1 if date in de_holidays else 0
             is_weekend = 1 if date.weekday() >= 5 else 0
             
+            # Get season for this date
+            season = get_season(datetime.combine(date, datetime.min.time()))
+            
+            # Calculate seasonal multiplier
+            season_multiplier = get_category_season_multiplier(category, season)
+            
+            # Calculate holiday impact multiplier
+            date_dt = datetime.combine(date, datetime.min.time())
+            holiday_multiplier = get_holiday_impact(date_dt, category, custom_holidays)
+            
             row = {
                 "date": date,
                 "store_id": store_id,
@@ -145,6 +281,9 @@ def create_forecast_features(store_id: str, products_data: pd.DataFrame, forecas
                 "weekday": date.weekday(),
                 "is_weekend": is_weekend,
                 "is_holiday": is_holiday,
+                "season": season,
+                "season_multiplier": season_multiplier,
+                "holiday_multiplier": holiday_multiplier,
                 "promo": promo,
                 "promo2": promo2,
                 "lag_1": lag_1,
@@ -320,11 +459,21 @@ async def predict_forecast(request: ForecastRequest):
             print(forecast_df.iloc[0][["product", "date", "lag_1", "lag_7", "r7", "customers"]])
 
         predictions = model.predict(X_forecast, num_iteration=model.best_iteration)
-        print(f"🔍 DEBUG: Predictions sample: {predictions[:5]}")
+        print(f"🔍 DEBUG: Predictions sample (raw): {predictions[:5]}")
         predictions = np.maximum(predictions, 0)  # No negative sales
         
+        # Apply seasonal and holiday multipliers to predictions
+        if 'season_multiplier' in forecast_df.columns and 'holiday_multiplier' in forecast_df.columns:
+            seasonal_adjusted = predictions * forecast_df['season_multiplier'].values
+            final_predictions = seasonal_adjusted * forecast_df['holiday_multiplier'].values
+            print(f"✅ Applied seasonal and holiday adjustments")
+            print(f"🔍 DEBUG: Predictions sample (adjusted): {final_predictions[:5]}")
+        else:
+            final_predictions = predictions
+            print(f"⚠️ Seasonal/holiday multipliers not found, using raw predictions")
+        
         # Add predictions to dataframe
-        forecast_df["predicted_quantity"] = predictions
+        forecast_df["predicted_quantity"] = final_predictions
         
         # Group by product and create response
         product_forecasts = []

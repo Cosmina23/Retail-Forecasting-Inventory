@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Calendar, Target, Loader2, Package, ShoppingCart } from "lucide-react";
-import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Bar, BarChart } from "recharts";
+import { Input } from "@/components/ui/input";
+import { TrendingUp, Calendar, Target, Loader2, Package, ShoppingCart, Search, X, TrendingDown } from "lucide-react";
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Bar, BarChart, Line, LineChart, Legend, ComposedChart } from "recharts";
 import { useState, useEffect } from "react";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
@@ -43,6 +44,9 @@ const Forecasting = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [productNameMap, setProductNameMap] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedProduct, setSelectedProduct] = useState<ProductForecast | null>(null);
+  const [productHistory, setProductHistory] = useState<any[]>([]);
 
   useEffect(() => {
     loadSelectedStore();
@@ -98,6 +102,8 @@ const Forecasting = () => {
       const response = await apiService.getForecast(selectedStore, forecastDays, productId);
       setForecastData(response);
       setCurrentPage(1); // Reset pagination when new forecast is generated
+      setSelectedProduct(null); // Reset selected product
+      setSearchQuery(""); // Reset search
       toast.success("Forecast generated successfully");
 
       // Log the forecast activity
@@ -164,6 +170,50 @@ const Forecasting = () => {
     return { label: "Moderate", color: "bg-yellow-500" };
   };
 
+  const handleProductSelect = async (product: ProductForecast) => {
+    setSelectedProduct(product);
+    
+    // Load historical sales data for this product
+    try {
+      const salesResponse = await apiService.getSales(0, 1000, 30); // Last 30 days
+      
+      if (salesResponse?.sales) {
+        // Filter sales for this specific product
+        const productSales = salesResponse.sales.filter((sale: any) => {
+          const saleProductId = sale.product_id;
+          return saleProductId === product.product || 
+                 productNameMap[saleProductId] === product.product ||
+                 saleProductId === Object.keys(productNameMap).find(key => productNameMap[key] === product.product);
+        });
+        
+        // Group by date and sum quantities
+        const salesByDate: Record<string, number> = {};
+        productSales.forEach((sale: any) => {
+          const date = new Date(sale.sale_date || sale.created_at).toISOString().split('T')[0];
+          salesByDate[date] = (salesByDate[date] || 0) + (sale.quantity || 0);
+        });
+        
+        // Convert to array and sort
+        const historyData = Object.entries(salesByDate)
+          .map(([date, quantity]) => ({ date, quantity }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        setProductHistory(historyData);
+      }
+    } catch (error) {
+      console.error("Failed to load product history:", error);
+      toast.error("Failed to load product history");
+    }
+  };
+
+  // Filter products based on search query
+  const filteredProducts = forecastData?.products.filter(product => {
+    const displayName = getProductDisplayName(product.product).toLowerCase();
+    const category = product.category.toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return displayName.includes(query) || category.includes(query);
+  }) || [];
+
   // Prepare chart data with product names
   const chartData = forecastData?.products?.[0]?.dates?.map((date, idx) => ({
     date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -171,6 +221,35 @@ const Forecasting = () => {
       forecastData.products.map(p => [getProductDisplayName(p.product), p.daily_forecast[idx] || 0])
     )
   })) || [];
+
+  // Prepare comparison chart data for selected product
+  const comparisonChartData = selectedProduct ? (() => {
+    const data: any[] = [];
+    
+    // Add historical data
+    productHistory.forEach(item => {
+      data.push({
+        date: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: item.date,
+        actual: item.quantity,
+        forecast: null,
+        type: 'history'
+      });
+    });
+    
+    // Add forecast data
+    selectedProduct.dates.forEach((date, idx) => {
+      data.push({
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: date,
+        actual: null,
+        forecast: selectedProduct.daily_forecast[idx],
+        type: 'forecast'
+      });
+    });
+    
+    return data.sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime());
+  })() : [];
 
   return (
     <DashboardLayout>
@@ -352,10 +431,30 @@ const Forecasting = () => {
             {/* Product Recommendations Table */}
             <Card className="animate-fade-up" style={{ animationDelay: "0.2s" }}>
               <CardHeader>
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <Package className="w-5 h-5 text-primary" />
-                  Inventory Order Recommendations ({forecastData.products.length} products)
-                </CardTitle>
+                <div className="flex items-center justify-between gap-4">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary" />
+                    Inventory Order Recommendations ({filteredProducts.length} products)
+                  </CardTitle>
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search products..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 pr-9"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -370,12 +469,17 @@ const Forecasting = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {forecastData.products
+                    {filteredProducts
                       .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
                       .map((product, idx) => {
                         const status = getStockStatus(product.current_stock, product.recommended_order);
+                        const isSelected = selectedProduct?.product === product.product;
                         return (
-                          <TableRow key={idx}>
+                          <TableRow 
+                            key={idx}
+                            className={`cursor-pointer transition-colors hover:bg-accent/50 ${isSelected ? 'bg-accent' : ''}`}
+                            onClick={() => handleProductSelect(product)}
+                          >
                             <TableCell className="font-medium">
                               {getProductDisplayName(product.product)}
                             </TableCell>
@@ -423,10 +527,10 @@ const Forecasting = () => {
                   </div>
                   <div className="text-sm text-muted-foreground">
                     Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                    {Math.min(currentPage * itemsPerPage, forecastData.products.length)} of{" "}
-                    {forecastData.products.length} products
+                    {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of{" "}
+                    {filteredProducts.length} products
                   </div>
-                  {forecastData.products.length > itemsPerPage && (
+                  {filteredProducts.length > itemsPerPage && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
@@ -436,8 +540,8 @@ const Forecasting = () => {
                         Previous
                       </button>
                       <button
-                        onClick={() => setCurrentPage(Math.min(Math.ceil(forecastData.products.length / itemsPerPage), currentPage + 1))}
-                        disabled={currentPage === Math.ceil(forecastData.products.length / itemsPerPage)}
+                        onClick={() => setCurrentPage(Math.min(Math.ceil(filteredProducts.length / itemsPerPage), currentPage + 1))}
+                        disabled={currentPage === Math.ceil(filteredProducts.length / itemsPerPage)}
                         className="px-3 py-1 rounded border border-input text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
                       >
                         Next
@@ -447,6 +551,163 @@ const Forecasting = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Product Comparison Chart - Forecast vs History */}
+            {selectedProduct && (
+              <Card className="animate-fade-up" style={{ animationDelay: "0.25s" }}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                      Product Analysis: {getProductDisplayName(selectedProduct.product)}
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedProduct(null);
+                        setProductHistory([]);
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Comparison of historical sales (last 30 days) vs. {forecastDays}-day forecast
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {/* Product Details Cards */}
+                  <div className="grid sm:grid-cols-4 gap-3 mb-6">
+                    <div className="p-3 rounded-lg bg-accent">
+                      <p className="text-xs text-muted-foreground mb-1">Category</p>
+                      <Badge className={getCategoryColor(selectedProduct.category)} variant="secondary">
+                        {selectedProduct.category}
+                      </Badge>
+                    </div>
+                    <div className="p-3 rounded-lg bg-accent">
+                      <p className="text-xs text-muted-foreground mb-1">Current Stock</p>
+                      <p className="text-lg font-bold">{selectedProduct.current_stock}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-accent">
+                      <p className="text-xs text-muted-foreground mb-1">{forecastDays}-Day Forecast</p>
+                      <p className="text-lg font-bold text-blue-500">{Math.round(selectedProduct.total_forecast)}</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-accent">
+                      <p className="text-xs text-muted-foreground mb-1">Recommended Order</p>
+                      <p className={`text-lg font-bold ${selectedProduct.recommended_order > 0 ? 'text-orange-500' : 'text-green-500'}`}>
+                        {selectedProduct.recommended_order}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Comparison Chart */}
+                  <div className="h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={comparisonChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis 
+                          dataKey="date" 
+                          tick={{ fontSize: 12 }} 
+                          stroke="hsl(var(--muted-foreground))"
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--popover))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px'
+                          }}
+                          formatter={(value: any) => [value ? Math.round(value) : 'N/A', '']}
+                        />
+                        <Legend 
+                          wrapperStyle={{ paddingTop: '20px' }}
+                          iconType="line"
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="actual"
+                          name="Historical Sales"
+                          stroke="hsl(var(--chart-1))"
+                          fill="url(#colorActual)"
+                          strokeWidth={2}
+                          connectNulls={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="forecast"
+                          name="Forecast"
+                          stroke="hsl(var(--chart-2))"
+                          strokeWidth={3}
+                          strokeDasharray="5 5"
+                          dot={{ fill: 'hsl(var(--chart-2))', r: 4 }}
+                          connectNulls={false}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Summary Statistics */}
+                  <div className="grid sm:grid-cols-3 gap-4 mt-6 pt-6 border-t">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Avg. Daily Sales (History)</p>
+                      <p className="text-xl font-bold text-chart-1">
+                        {productHistory.length > 0 
+                          ? Math.round(productHistory.reduce((sum, item) => sum + item.quantity, 0) / productHistory.length)
+                          : 0}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Avg. Daily Forecast</p>
+                      <p className="text-xl font-bold text-chart-2">
+                        {Math.round(selectedProduct.total_forecast / forecastDays)}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Trend</p>
+                      <div className="flex items-center justify-center gap-2">
+                        {(() => {
+                          const avgHistory = productHistory.length > 0 
+                            ? productHistory.reduce((sum, item) => sum + item.quantity, 0) / productHistory.length 
+                            : 0;
+                          const avgForecast = selectedProduct.total_forecast / forecastDays;
+                          const trend = avgForecast > avgHistory ? 'up' : 'down';
+                          const percentage = avgHistory > 0 
+                            ? Math.abs(((avgForecast - avgHistory) / avgHistory) * 100).toFixed(1)
+                            : 0;
+                          
+                          return (
+                            <>
+                              {trend === 'up' ? (
+                                <TrendingUp className="w-5 h-5 text-green-500" />
+                              ) : (
+                                <TrendingDown className="w-5 h-5 text-red-500" />
+                              )}
+                              <span className={`text-xl font-bold ${trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
+                                {percentage}%
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
 

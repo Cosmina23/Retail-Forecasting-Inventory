@@ -43,8 +43,7 @@ import { apiService } from "@/services/api";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-// @ts-ignore - no types available for jspdf-autotable
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface Supplier {
   id: string;
@@ -88,6 +87,7 @@ const PurchaseOrders = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [selectedSupplier, setSelectedSupplier] = useState<string>("");
+  const [forecastDays, setForecastDays] = useState<number>(7);
   const [deliveryDate, setDeliveryDate] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -288,10 +288,11 @@ const PurchaseOrders = () => {
 
     setLoading(true);
     try {
-      const po = await apiService.generatePurchaseOrderFromRecommendations(
+      const po = await apiService.generatePurchaseOrderFromForecast(
         selectedStore,
         selectedSupplier,
-        notes || "Auto-generiert basierend auf Lagerbestandsempfehlungen"
+        notes || "AI-generiert basierend auf Forecast (inkl. Saisonalität & Feiertage)",
+        forecastDays
       );
       setGeneratedPO(po);
       
@@ -310,17 +311,18 @@ const PurchaseOrders = () => {
       await logActivity(
         selectedStore,
         "purchase_order_created",
-        `Auto-generated purchase order ${po.po_number}`,
+        `AI-generated purchase order ${po.po_number} from forecast`,
         {
           po_number: po.po_number,
           supplier: selectedSupplier,
           items_count: po.items.length,
           total_cost: po.total_cost,
           auto_generated: true,
+          generated_from: "forecast",
         }
       );
       
-      toast.success("Purchase order auto-generated from inventory!");
+      toast.success("Purchase order generated from AI forecast!");
     } catch (error: any) {
       console.error("Failed to auto-generate PO:", error);
       toast.error(error.message || "Failed to auto-generate purchase order");
@@ -423,12 +425,12 @@ const PurchaseOrders = () => {
     // Items table
     const tableData = generatedPO.items.map((item: any) => [
       item.product_name,
-      item.quantity,
+      item.quantity.toString(),
       `€${item.unit_price.toFixed(2)}`,
       `€${(item.quantity * item.unit_price).toFixed(2)}`
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: 90,
       head: [['Product', 'Qty', 'Unit Price', 'Total']],
       body: tableData,
@@ -437,7 +439,7 @@ const PurchaseOrders = () => {
       styles: { fontSize: 9 }
     });
 
-    // Totals
+    // Totals - get final Y position from autoTable
     const finalY = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(10);
     doc.text(`Subtotal: €${generatedPO.subtotal.toFixed(2)}`, 140, finalY);
@@ -554,6 +556,26 @@ const PurchaseOrders = () => {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div>
+                    <Label>Forecast Period / Prognosezeitraum</Label>
+                    <Select value={forecastDays.toString()} onValueChange={(value) => setForecastDays(Number(value))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">7 days / Tage</SelectItem>
+                        <SelectItem value="14">14 days / Tage</SelectItem>
+                        <SelectItem value="30">30 days / Tage</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    <strong>📊 Info:</strong> Make sure you have generated a forecast with the selected period ({forecastDays} days) before creating the purchase order. The order quantities will be based on that forecast period.
+                  </p>
                 </div>
 
                 <Button 
@@ -564,7 +586,7 @@ const PurchaseOrders = () => {
                   size="lg"
                 >
                   <ShoppingCart className="w-4 h-4 mr-2" />
-                  Auto-Generate from Inventory
+                  Generate from AI Forecast
                 </Button>
 
                 <div>
