@@ -464,6 +464,12 @@ async def predict_forecast(request: ForecastRequest):
         
         # Apply seasonal and holiday multipliers to predictions
         if 'season_multiplier' in forecast_df.columns and 'holiday_multiplier' in forecast_df.columns:
+            # Debug: Show multipliers being applied
+            print(f"🔍 DEBUG: Season multipliers sample: {forecast_df['season_multiplier'].values[:5]}")
+            print(f"🔍 DEBUG: Holiday multipliers sample: {forecast_df['holiday_multiplier'].values[:5]}")
+            print(f"🔍 DEBUG: Max holiday multiplier: {forecast_df['holiday_multiplier'].max()}")
+            print(f"🔍 DEBUG: Products with holiday boost > 1.0: {(forecast_df['holiday_multiplier'] > 1.0).sum()}")
+            
             seasonal_adjusted = predictions * forecast_df['season_multiplier'].values
             final_predictions = seasonal_adjusted * forecast_df['holiday_multiplier'].values
             print(f"✅ Applied seasonal and holiday adjustments")

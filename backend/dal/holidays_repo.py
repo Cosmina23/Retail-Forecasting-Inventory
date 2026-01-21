@@ -85,10 +85,13 @@ def get_holidays_by_date_range(
 def get_holidays_by_market_and_date_range(
     market: str, start_date: datetime, end_date: datetime, skip: int = 0, limit: int = 100
 ) -> List[Dict[str, Any]]:
-    """Get holidays for a specific market within a date range."""
+    """Get holidays for a specific market within a date range. Also returns holidays marked for 'all' markets."""
     cursor = holidays_collection.find(
         {
-            "market": market,
+            "$or": [
+                {"market": market},
+                {"market": "all"}
+            ],
             "date": {"$gte": start_date, "$lte": end_date},
         }
     ).skip(skip).limit(limit)
