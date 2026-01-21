@@ -17,6 +17,8 @@ import NotFound from "./pages/NotFound";
 import Sales from "./pages/Sales";
 import Settings from "./pages/Settings";
 import Chat from "./pages/Chat";
+import TermsOfService from "./pages/TermsOfService";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +31,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/index" element={<ShopSelector />} />
           <Route path="/settings" element={<Settings />} />
