@@ -103,6 +103,9 @@
     "noOrders": "No purchase orders yet",
     "createFirstOrder": "Create your first purchase order to get started.",
     "downloadPO": "Download PO",
+    "viewAllOrders": "View All Orders",
+    "orderConfiguration": "Order Configuration",
+    "notes": "Notes",
     "orderConfiguration": "Order Configuration",
     "notes": "Notes"
   },

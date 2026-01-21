@@ -102,7 +102,8 @@
     "makeSureForecast": "Asigură-te că ai generat o previziune cu perioada selectată ({{days}} zile) înainte de a crea comanda de achiziție. Cantitățile comandate vor fi bazate pe acea perioadă de previziune.",
     "noOrders": "Nicio comandă încă",
     "createFirstOrder": "Creează prima comandă pentru a începe.",
-    "downloadPO": "Descarcă Comandă",
+    "downloadPO": "Descarcă Comanda",
+    "viewAllOrders": "Vezi Toate Comenzile",
     "orderConfiguration": "Configurare Comandă",
     "notes": "Note"
   },

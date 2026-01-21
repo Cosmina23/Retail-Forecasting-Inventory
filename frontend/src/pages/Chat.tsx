@@ -168,19 +168,6 @@ const Chat = () => {
 
   return (
     <DashboardLayout>
-      <div className="h-[calc(100vh-120px)] flex flex-col p-4">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <Bot className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{t('chat.inventoryAssistant')}</h1>
-              <p className="text-sm text-muted-foreground">{t('chat.aiPoweredInsights')}</p>
-            </div>
-          </div>
-        </div>
       <div className="h-[calc(100vh-120px)] flex gap-4 p-4">
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col">
@@ -191,8 +178,8 @@ const Chat = () => {
                 <Bot className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Inventory Assistant</h1>
-                <p className="text-sm text-muted-foreground">AI-powered insights for your store</p>
+                <h1 className="text-2xl font-bold tracking-tight">{t('chat.inventoryAssistant')}</h1>
+                <p className="text-sm text-muted-foreground">{t('chat.aiPoweredInsights')}</p>
               </div>
             </div>
             <Button
@@ -214,39 +201,26 @@ const Chat = () => {
                     <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mb-6">
                       <Sparkles className="w-10 h-10 text-blue-500" />
                     </div>
-                    <h2 className="text-xl font-bold text-slate-800 mb-2">How can I help you today?</h2>
+                    <h2 className="text-xl font-bold text-slate-800 mb-2">{t('chat.howCanIHelp')}</h2>
                     <p className="text-muted-foreground mb-8 max-w-md">
-                      Ask me about stock levels, forecasts, orders, or any inventory-related questions.
+                      {t('chat.askAboutDetails')}
                     </p>
-        {/* Chat Container */}
-        <Card className="flex-1 flex flex-col shadow-xl border-none bg-white/80 backdrop-blur-md overflow-hidden">
-          <CardContent className="flex-1 p-0 overflow-hidden">
-            <ScrollArea className="h-full p-6" ref={scrollRef}>
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mb-6">
-                    <Sparkles className="w-10 h-10 text-blue-500" />
-                  </div>
-                  <h2 className="text-xl font-bold text-slate-800 mb-2">{t('chat.howCanIHelp')}</h2>
-                  <p className="text-muted-foreground mb-8 max-w-md">
-                    {t('chat.askAboutDetails')}
-                  </p>
 
-                  {/* Suggested Questions */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-                    {suggestedQuestions.map((question, idx) => (
-                      <Button
-                        key={idx}
-                        variant="outline"
-                        className="text-left h-auto py-3 px-4 justify-start text-sm font-medium hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all"
-                        onClick={() => setInput(question)}
-                      >
-                        {question}
-                      </Button>
-                    ))}
+                    {/* Suggested Questions */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl w-full">
+                      {suggestedQuestions.map((question, idx) => (
+                        <Button
+                          key={idx}
+                          variant="outline"
+                          className="text-left h-auto py-4 px-5 justify-start text-sm font-medium hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all whitespace-normal leading-relaxed"
+                          onClick={() => setInput(question)}
+                        >
+                          {question}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : (
+                ) : (
                 <div className="space-y-6">
                   {messages.map((msg, idx) => (
                     <div
@@ -309,81 +283,6 @@ const Chat = () => {
               </Button>
             </div>
           </CardFooter>
-                    {/* Suggested Questions */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl w-full">
-                      {suggestedQuestions.map((question, idx) => (
-                        <Button
-                          key={idx}
-                          variant="outline"
-                          className="text-left h-auto py-4 px-5 justify-start text-sm font-medium hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all whitespace-normal leading-relaxed"
-                          onClick={() => setInput(question)}
-                        >
-                          {question}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {messages.map((msg, idx) => (
-                      <div
-                        key={idx}
-                        className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        {msg.role === 'assistant' && (
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-                            <Bot className="w-4 h-4 text-white" />
-                          </div>
-                        )}
-                        <div
-                          className={`max-w-[70%] rounded-2xl px-4 py-3 ${
-                            msg.role === 'user'
-                              ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
-                              : 'bg-slate-100 text-slate-800'
-                          }`}
-                        >
-                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                        {msg.role === 'user' && (
-                          <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                            <User className="w-4 h-4 text-slate-600" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {isLoading && (
-                      <div className="flex gap-3 justify-start">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                          <Bot className="w-4 h-4 text-white" />
-                        </div>
-                        <div className="bg-slate-100 rounded-2xl px-4 py-3">
-                          <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </ScrollArea>
-            </CardContent><CardFooter className="p-4 border-t border-slate-100 bg-white/50">
-              <div className="flex w-full gap-3">
-                <Input
-                  placeholder="Ask about inventory, forecasts, orders..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  disabled={isLoading}
-                  className="flex-1 h-12 rounded-xl border-slate-200 focus:border-blue-400 focus:ring-blue-400"
-                />
-                <Button
-                  onClick={handleSend}
-                  disabled={isLoading || !input.trim()}
-                  size="icon"
-                  className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 shadow-lg"
-                >
-                  <Send className="h-5 w-5" />
-                </Button>
-              </div>
-            </CardFooter>
           </Card>
         </div>
 

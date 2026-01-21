@@ -5,7 +5,7 @@ type Language = 'en' | 'ro' | 'de';
 interface LanguageContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, any>) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -37,7 +37,7 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
     localStorage.setItem('appLanguage', lang);
   };
 
-  const t = (key: string): string => {
+  const t = (key: string, params?: Record<string, any>): string => {
     const keys = key.split('.');
     let value: any = translations[language];
     
@@ -49,7 +49,17 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
       }
     }
     
-    return typeof value === 'string' ? value : key;
+    if (typeof value === 'string') {
+      // Replace template variables like {{weeks}}
+      if (params) {
+        return value.replace(/\{\{(\w+)\}\}/g, (match, paramKey) => {
+          return params[paramKey]?.toString() || match;
+        });
+      }
+      return value;
+    }
+    
+    return key;
   };
 
   return (
