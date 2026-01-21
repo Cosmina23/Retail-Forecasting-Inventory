@@ -302,10 +302,11 @@ class ApiService {
     });
   }
 
-  async generatePurchaseOrderFromForecast(storeId: string, supplier: string, notes?: string) {
+  async generatePurchaseOrderFromForecast(storeId: string, supplier: string, notes?: string, forecastDays: number = 7) {
     const params = new URLSearchParams({
       store_id: storeId,
       supplier: supplier,
+      forecast_days: forecastDays.toString(),
     });
     if (notes) params.append('notes', notes);
     

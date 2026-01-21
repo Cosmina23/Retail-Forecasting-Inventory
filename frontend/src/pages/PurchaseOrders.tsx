@@ -88,6 +88,7 @@ const PurchaseOrders = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [selectedSupplier, setSelectedSupplier] = useState<string>("");
+  const [forecastDays, setForecastDays] = useState<number>(7);
   const [deliveryDate, setDeliveryDate] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -291,7 +292,8 @@ const PurchaseOrders = () => {
       const po = await apiService.generatePurchaseOrderFromForecast(
         selectedStore,
         selectedSupplier,
-        notes || "AI-generiert basierend auf Forecast (inkl. Saisonalität & Feiertage)"
+        notes || "AI-generiert basierend auf Forecast (inkl. Saisonalität & Feiertage)",
+        forecastDays
       );
       setGeneratedPO(po);
       
@@ -555,6 +557,26 @@ const PurchaseOrders = () => {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div>
+                    <Label>Forecast Period / Prognosezeitraum</Label>
+                    <Select value={forecastDays.toString()} onValueChange={(value) => setForecastDays(Number(value))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">7 days / Tage</SelectItem>
+                        <SelectItem value="14">14 days / Tage</SelectItem>
+                        <SelectItem value="30">30 days / Tage</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    <strong>📊 Info:</strong> Make sure you have generated a forecast with the selected period ({forecastDays} days) before creating the purchase order. The order quantities will be based on that forecast period.
+                  </p>
                 </div>
 
                 <Button 

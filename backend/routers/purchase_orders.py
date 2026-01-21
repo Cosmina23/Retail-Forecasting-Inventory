@@ -318,39 +318,68 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
 async def generate_from_forecast(
     store_id: str,
     supplier: str,
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
+    forecast_days: Optional[int] = 7
 ):
     """
     Auto-generate PO from latest AI forecast (includes seasonality & holidays)
-    Uses the most recent forecast saved in the database
+    Uses the most recent forecast saved in the database with the specified period
+    
+    Args:
+        store_id: Store identifier
+        supplier: Supplier name
+        notes: Optional notes for the PO
+        forecast_days: Number of days to use from forecast (default: 7). 
+                       Will look for a forecast with this exact period.
     """
     
     try:
-        print(f"📊 Looking for latest forecast for store {store_id}")
+        print(f"📊 Looking for latest forecast for store {store_id} with {forecast_days} days period")
         
         # Import collections
         from database import products_collection, forecasts_collection
         from bson import ObjectId
         
-        # Find the most recent forecast for this store
+        # Find the most recent forecast for this store with the specified period
         latest_forecast = forecasts_collection.find_one(
-            {"store_id": str(store_id)},
+            {
+                "store_id": str(store_id),
+                "forecast_period_days": forecast_days
+            },
             sort=[("forecast_date", -1)]
         )
         
         if not latest_forecast:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"No forecast found for store {store_id}. Please generate a forecast first in the Forecasting page."
+            # Try to find ANY forecast for this store to provide helpful message
+            any_forecast = forecasts_collection.find_one(
+                {"store_id": str(store_id)},
+                sort=[("forecast_date", -1)]
             )
+            
+            if any_forecast:
+                available_days = any_forecast.get("forecast_period_days", "unknown")
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"No forecast found for store {store_id} with {forecast_days} days period. Found forecast with {available_days} days. Please generate a {forecast_days}-day forecast first or change the forecast period in Purchase Orders."
+                )
+            else:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"No forecast found for store {store_id}. Please generate a forecast first in the Forecasting page."
+                )
         
         forecast_date = latest_forecast.get("forecast_date")
-        forecast_days = latest_forecast.get("forecast_period_days", 7)
+        actual_forecast_days = latest_forecast.get("forecast_period_days", 7)
         products = latest_forecast.get("products", [])
         
-        print(f"✅ Found forecast from {forecast_date} ({forecast_days} days, {len(products)} products)")
+        print(f"✅ Found forecast from {forecast_date} ({actual_forecast_days} days, {len(products)} products)")
         print(f"   Using forecast ID: {latest_forecast.get('_id')}")
         print(f"   Forecast created at: {latest_forecast.get('created_at')}")
+        
+        # Verify the forecast period matches what was requested
+        if actual_forecast_days != forecast_days:
+            print(f"⚠️  WARNING: Requested {forecast_days} days but found {actual_forecast_days} days forecast!")
+            print(f"   Quantities are calculated for {actual_forecast_days} days, not {forecast_days} days.")
         
         if not products:
             return {
