@@ -14,6 +14,7 @@ import os
 from dotenv import load_dotenv
 from typing import Optional
 import json
+from bson import ObjectId
 
 # Load environment variables
 load_dotenv(dotenv_path="../.env")
@@ -31,37 +32,48 @@ TEMPERATURE = 0.7           # Balance between creativity and consistency
 def get_store_context(store_id: str) -> dict:
     """
     Fetch relevant data from MongoDB for the chatbot context.
-    Limits reduced to avoid token overflow.
     """
 
-    # Reduce limits significantly
+    # Products use store_ids (array), not store_id
     products = list(
         products_collection.find(
-            {"store_id": store_id},
+            {"store_ids": store_id},  # Changed: query array field
             {"_id": 0, "name": 1, "category": 1, "price": 1, "sku": 1}
         ).limit(15)
     )
 
+    # Inventory uses store_id (string) - this is correct
     inventory = list(
         inventory_collection.find(
             {"store_id": store_id},
-            {"_id": 0, "product_name": 1, "stock_quantity": 1, "reorder_point": 1}
+            {"_id": 0, "product_id": 1, "quantity": 1, "reorder_point": 1}
         ).limit(15)
     )
 
+    # Sales - check your sales collection structure
     sales = list(
         sales_collection.find(
             {"store_id": store_id},
-            {"_id": 0, "product_name": 1, "quantity": 1, "date": 1, "total": 1}
+            {"_id": 0, "product_id": 1, "quantity": 1, "date": 1, "total": 1}
         ).sort("date", -1).limit(20)
     )
 
+    # Forecasts
     forecasts = list(
         forecasts_collection.find(
             {"store_id": store_id},
             {"_id": 0, "product_name": 1, "predicted_demand": 1, "date": 1}
         ).limit(10)
     )
+
+    # Enrich inventory with product names
+    for inv_item in inventory:
+        pid = inv_item.get("product_id")
+        if pid:
+            product = products_collection.find_one({"_id": ObjectId(pid) if ObjectId.is_valid(pid) else pid})
+            if product:
+                inv_item["product_name"] = product.get("name")
+                inv_item["stock_quantity"] = inv_item.get("quantity", 0)
 
     return {
         "products": products,

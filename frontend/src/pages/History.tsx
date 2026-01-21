@@ -248,7 +248,6 @@ const History = () => {
                 <SelectItem value="purchase_order_created">Purchase Orders</SelectItem>
                 <SelectItem value="inventory_optimized">Optimizations</SelectItem>
                 <SelectItem value="inventory_updated">Inventory Updates</SelectItem>
-                <SelectItem value="sale_recorded">Sales</SelectItem>
                 <SelectItem value="data_imported">Imports</SelectItem>
               </SelectContent>
             </Select>

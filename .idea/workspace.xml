@@ -6,9 +6,12 @@
   <component name="ChangeListManager">
     <list default="true" id="2670b04c-5e74-43c9-a7fc-d90ddee9dbc6" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Inventory.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Inventory.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/PurchaseOrders.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/PurchaseOrders.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Sales.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Sales.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/services/chatbot.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/services/chatbot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/index.css" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/index.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Chat.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Chat.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Forecasting.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Forecasting.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/History.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/History.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Settings.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Settings.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,7 +63,7 @@
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
     &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;26-update-chatbot-and-history&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;30-update-chatbot&quot;,
     &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;C:/Users/MrCag/Documents/GitHub/Retail-Forecasting-Inventory&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
@@ -107,6 +110,8 @@
       <workItem from="1767710459562" duration="657000" />
       <workItem from="1768900427585" duration="372000" />
       <workItem from="1768900974326" duration="4399000" />
+      <workItem from="1768989707438" duration="180000" />
+      <workItem from="1768989915910" duration="4095000" />
     </task>
     <servers />
   </component>
