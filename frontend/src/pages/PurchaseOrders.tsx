@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { useLocation } from "react-router-dom";
 import { 
   FileText, 
   Download, 
@@ -49,6 +50,12 @@ interface Supplier {
   id: string;
   name: string;
   payment_terms: string;
+  lead_time: number;
+}
+
+interface SavedPurchaseOrder extends PurchaseOrder {
+  status: 'pending' | 'received';
+  created_at: string;
 }
 
 interface Store {
@@ -95,6 +102,17 @@ const PurchaseOrders = () => {
   const [generatedPO, setGeneratedPO] = useState<PurchaseOrder | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<'excel' | 'pdf' | 'txt'>('excel');
+  const location = useLocation();
+  const [categories, setCategories] = useState<string[]>([]);
+  const [newCategoryDialogOpen, setNewCategoryDialogOpen] = useState(false);
+  const [customCategory, setCustomCategory] = useState("");
+  const [pendingOrders, setPendingOrders] = useState<SavedPurchaseOrder[]>([]);
+  const [receivingOrder, setReceivingOrder] = useState<SavedPurchaseOrder | null>(null);
+  const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
+  const [receivedQuantities, setReceivedQuantities] = useState<Record<string, number>>({});
+  const [allOrders, setAllOrders] = useState<SavedPurchaseOrder[]>([]);
+const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+const [loadingHistory, setLoadingHistory] = useState(false);
   
   // Order Items Dialog states
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
@@ -112,6 +130,55 @@ const PurchaseOrders = () => {
     unit_price: 0,
     description: ""
   });
+
+useEffect(() => {
+  const loadCategories = async () => {
+    if (!selectedStore) return;
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`http://localhost:8000/api/purchase-orders/categories/${selectedStore}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error("Eroare la încărcarea categoriilor:", error);
+    }
+  };
+
+  loadCategories();
+}, [selectedStore]);
+
+useEffect(() => {
+  if (selectedSupplier && suppliers.length > 0) {
+    const supplier = suppliers.find(s => s.id === selectedSupplier);
+    if (supplier) {
+      const date = new Date();
+      date.setDate(date.getDate() + supplier.lead_time);
+      const formattedDate = date.toISOString().split('T')[0];
+      setDeliveryDate(formattedDate);
+    }
+  }
+}, [selectedSupplier, suppliers]);
+
+  useEffect(() => {
+  if (location.state?.items && items.length === 0) {
+    const criticalToOrder = location.state.items.map((item: any) => ({
+      id: `crit-${Date.now()}-${item.product_id}`,
+      product_name: item.product_name,
+      category: item.category || "Electronics",
+      // Calculăm o cantitate sugerată (ex: dublul pragului critic sau o valoare fixă)
+      quantity: item.reorder_point > 0 ? item.reorder_point * 2 : 10,
+      unit_price: item.unit_price || 0, // Utilizatorul va introduce prețul sau se va lua din DB ulterior
+      description: `Critical Restoration - Current Stock: ${item.quantity}`
+    }));
+
+    setItems(criticalToOrder);
+    toast.success(`${criticalToOrder.length} critical products have been added automatically!`);
+  }
+}, [location.state]);
 
   useEffect(() => {
     loadInitialData();
@@ -132,6 +199,26 @@ const PurchaseOrders = () => {
       setSelectedStore(storeId);
     }
   }, [routeStoreId, stores]);
+
+const loadAllOrders = async () => {
+  if (!selectedStore) return;
+  setLoadingHistory(true);
+  setHistoryDialogOpen(true);
+  try {
+    const token = localStorage.getItem('access_token');
+    const res = await fetch(`http://localhost:8000/api/purchase-orders/all/${selectedStore}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setAllOrders(data);
+    }
+  } catch (error) {
+    toast.error("Failed to load order history");
+  } finally {
+    setLoadingHistory(false);
+  }
+};
 
   const loadInitialData = async () => {
     try {
@@ -194,6 +281,65 @@ const PurchaseOrders = () => {
     setItems(items.filter(item => item.id !== id));
     toast.success("Item removed");
   };
+
+const loadPendingOrders = async (storeId: string) => {
+  try {
+    const token = localStorage.getItem('access_token');
+    // Va trebui să creezi acest endpoint simplu în backend:
+    // @router.get("/pending/{store_id}")
+    const res = await fetch(`http://localhost:8000/api/purchase-orders/pending/${storeId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setPendingOrders(data);
+    }
+  } catch (error) {
+    console.error("Failed to load pending orders", error);
+  }
+};
+
+// Apelăm funcția când se schimbă magazinul
+useEffect(() => {
+  if (selectedStore) {
+    loadPendingOrders(selectedStore);
+  }
+}, [selectedStore]);
+
+const handleConfirmDelivery = async () => {
+  if (!receivingOrder) return;
+
+  setLoading(true);
+  try {
+    const token = localStorage.getItem('access_token');
+    const payload = {
+      po_number: receivingOrder.po_number,
+      items_received: receivingOrder.items.map(item => ({
+        product_name: item.product_name,
+        received_quantity: receivedQuantities[item.product_name] ?? item.quantity
+      }))
+    };
+
+    const res = await fetch(`http://localhost:8000/api/purchase_orders/confirm-delivery`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      toast.success("Inventory updated successfully!");
+      setReceiveDialogOpen(false);
+      if (selectedStore) loadPendingOrders(selectedStore); // Refresh listă
+    }
+  } catch (error) {
+    toast.error("Failed to confirm delivery");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const updateItemQuantity = (id: string, quantity: number) => {
     if (quantity <= 0) {
@@ -500,21 +646,32 @@ const PurchaseOrders = () => {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Purchase Order Generator</h1>
-            <p className="text-muted-foreground">Erstellen Sie Bestellungen für deutsche Lieferanten</p>
-          </div>
-          {generatedPO && (
-            <Button onClick={downloadPO} variant="outline">
-              <Download className="w-4 h-4 mr-2" />
-              Download PO
-            </Button>
-          )}
-        </div>
+  <div>
+    <h1 className="text-2xl font-bold">Purchase Order Generator</h1>
+    <p className="text-muted-foreground">Erstellen Sie Bestellungen für deutsche Lieferanten</p>
+  </div>
+  <div className="flex gap-2">
+    {/* BUTONUL NOU */}
+    <Button onClick={loadAllOrders} variant="outline" className="flex items-center gap-2">
+      <List className="w-4 h-4" />
+      View All Orders
+    </Button>
+
+    {generatedPO && (
+      <Button onClick={downloadPO} variant="outline">
+        <Download className="w-4 h-4 mr-2" />
+        Download PO
+      </Button>
+    )}
+  </div>
+</div>
+
+
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Form */}
           <div className="lg:col-span-2 space-y-6">
+
             {/* Configuration Card */}
             <Card className="animate-fade-up">
               <CardHeader>
@@ -632,28 +789,37 @@ const PurchaseOrders = () => {
                         <Input
                           value={newItem.product_name}
                           onChange={(e) => setNewItem({ ...newItem, product_name: e.target.value })}
-                          placeholder="e.g., Laptop"
+                          placeholder="e.g., Item"
                         />
                       </div>
 
-                      <div>
-                        <Label>Category</Label>
-                        <Select 
-                          value={newItem.category} 
-                          onValueChange={(v) => setNewItem({ ...newItem, category: v })}
+                      <div className="space-y-2">
+                      <Label>Category</Label>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Select
+                            value={newItem.category}
+                            onValueChange={(v) => setNewItem({ ...newItem, category: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categories.map((cat) => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setNewCategoryDialogOpen(true)}
                         >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Electronics">Electronics</SelectItem>
-                            <SelectItem value="Clothing">Clothing</SelectItem>
-                            <SelectItem value="Food">Food</SelectItem>
-                            <SelectItem value="Furniture">Furniture</SelectItem>
-                            <SelectItem value="Toys">Toys</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          <Plus className="w-4 h-4" />
+                        </Button>
                       </div>
+                    </div>
 
                       <div>
                         <Label>Quantity / Menge</Label>
@@ -805,21 +971,65 @@ const PurchaseOrders = () => {
                   <CardTitle className="text-sm font-semibold">Supplier Info</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm space-y-2">
-                  {suppliers.find(s => s.id === selectedSupplier) && (
-                    <>
-                      <div>
-                        <span className="text-muted-foreground">Name:</span>
-                        <p className="font-medium">{suppliers.find(s => s.id === selectedSupplier)?.name}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Payment Terms:</span>
-                        <p className="font-medium">{suppliers.find(s => s.id === selectedSupplier)?.payment_terms}</p>
-                      </div>
-                    </>
-                  )}
+                  {(() => {
+                    const s = suppliers.find(sup => sup.id === selectedSupplier);
+                    return s ? (
+                      <>
+                        <div>
+                          <span className="text-muted-foreground">Name:</span>
+                          <p className="font-medium">{s.name}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Lead Time:</span>
+                          <p className="font-medium text-blue-600">{s.lead_time} days</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Payment Terms:</span>
+                          <p className="font-medium">{s.payment_terms}</p>
+                        </div>
+                      </>
+                    ) : null;
+                  })()}
                 </CardContent>
               </Card>
             )}
+        <Card className="mt-8 border-blue-100 bg-blue-50/30">
+  <CardHeader>
+    <CardTitle className="text-lg flex items-center gap-2">
+      <Package className="w-5 h-5 text-blue-600" />
+      Active Orders (Awaiting Delivery)
+    </CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="space-y-4">
+      {pendingOrders.length === 0 ? (
+        <p className="text-center py-4 text-muted-foreground italic">No orders currently in transit.</p>
+      ) : (
+        pendingOrders.map(po => (
+          <div key={po.po_number} className="flex items-center justify-between p-4 bg-white rounded-xl border shadow-sm">
+            <div>
+              <p className="font-bold">{po.po_number}</p>
+              <p className="text-xs text-muted-foreground">
+                {po.supplier_info.name} • Est. Delivery: {po.delivery_date}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                setReceivingOrder(po);
+                setReceiveDialogOpen(true);
+              }}
+            >
+              Receive Goods
+            </Button>
+          </div>
+        ))
+      )}
+    </div>
+  </CardContent>
+</Card>
+
+
           </div>
         </div>
 
@@ -1070,6 +1280,118 @@ const PurchaseOrders = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={newCategoryDialogOpen} onOpenChange={setNewCategoryDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>New Category</DialogTitle>
+            </DialogHeader>
+            <Input
+              placeholder="Category name..."
+              value={customCategory}
+              onChange={(e) => setCustomCategory(e.target.value)}
+            />
+            <DialogFooter>
+              <Button onClick={() => {
+                if (customCategory && !categories.includes(customCategory)) {
+                  setCategories([...categories, customCategory].sort());
+                  setNewItem({ ...newItem, category: customCategory });
+                  setCustomCategory("");
+                  setNewCategoryDialogOpen(false);
+                }
+              }}>Add</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={receiveDialogOpen} onOpenChange={setReceiveDialogOpen}>
+  <DialogContent className="sm:max-w-2xl">
+    <DialogHeader>
+      <DialogTitle>Confirm Goods Receipt: {receivingOrder?.po_number}</DialogTitle>
+      <DialogDescription>Enter the quantities received for each product.</DialogDescription>
+    </DialogHeader>
+
+    <div className="space-y-4 my-4 max-h-[50vh] overflow-y-auto">
+      {receivingOrder?.items.map(item => (
+        <div key={item.product_name} className="flex items-center justify-between p-3 border rounded-lg">
+          <div className="flex-1">
+            <p className="font-medium">{item.product_name}</p>
+            <p className="text-xs text-muted-foreground">Ordered: {item.quantity}</p>
+          </div>
+          <div className="w-32">
+            <Label className="text-[10px]">Quantity Received</Label>
+            <Input
+              type="number"
+              defaultValue={item.quantity}
+              onChange={(e) => setReceivedQuantities({
+                ...receivedQuantities,
+                [item.product_name]: parseInt(e.target.value) || 0
+              })}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setReceiveDialogOpen(false)}>Cancel</Button>
+      <Button onClick={handleConfirmDelivery} disabled={loading}>
+        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+        Confirm and Update Stock
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+<Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+  <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+    <DialogHeader>
+      <DialogTitle>Complete Order History</DialogTitle>
+      <DialogDescription>View all pending and finalized purchase orders.</DialogDescription>
+    </DialogHeader>
+
+    <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+      {loadingHistory ? (
+        <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
+      ) : allOrders.length === 0 ? (
+        <p className="text-center py-8 text-muted-foreground italic">No orders found.</p>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="p-3 text-left">PO Number</th>
+                <th className="p-3 text-left">Supplier</th>
+                <th className="p-3 text-left">Total Cost</th>
+                <th className="p-3 text-left">Status</th>
+                <th className="p-3 text-left">Delivery Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {allOrders.map((order) => (
+                <tr key={order.po_number} className="hover:bg-slate-50/50">
+                  <td className="p-3 font-mono font-medium">{order.po_number}</td>
+                  <td className="p-3">{order.supplier_info.name}</td>
+                  <td className="p-3 font-semibold">€{order.total_cost.toFixed(2)}</td>
+                  <td className="p-3">
+                    <Badge className={
+                      order.status === 'received'
+                      ? "bg-green-100 text-green-800 hover:bg-green-100"
+                      : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                    }>
+                      {order.status.toUpperCase()}
+                    </Badge>
+                  </td>
+                  <td className="p-3 text-muted-foreground">{order.delivery_date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </DialogContent>
+</Dialog>
       </div>
     </DashboardLayout>
   );

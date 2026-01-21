@@ -114,6 +114,45 @@ async def create_new_store(store: StoreCreate, current_user: any = Depends(get_c
         raise HTTPException(status_code=400, detail=f"Incomplete data: {str(e)}")
 
 
+@router.get("/{store_id}/critical-items-list")
+async def get_critical_items_details(store_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        pipeline = [
+            {
+                "$match": {
+                    "store_id": store_id,
+                    "$expr": {"$lte": ["$quantity", "$reorder_point"]}
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "products",
+                    "let": {"pid": "$product_id"},
+                    "pipeline": [
+                        {"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$pid"]}}}
+                    ],
+                    "as": "product_info"
+                }
+            },
+            {"$unwind": "$product_info"},
+            {
+                "$project": {
+                    "_id": 1,
+                    "product_id": 1,
+                    "quantity": 1,
+                    "reorder_point": 1,
+                    "product_name": "$product_info.name",
+                    "category": "$product_info.category",
+                    "unit_price": "$product_info.price"
+                }
+            }
+        ]
+
+        results = list(inventory_collection.aggregate(pipeline))
+        return serialize_mongo(results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{store_id}", response_model=dict)
 async def get_store(store_id: str):
     """Obține detalii despre un magazin specific."""
@@ -135,7 +174,6 @@ async def get_store(store_id: str):
 @router.get("/{store_id}/metrics")
 async def get_store_metrics(store_id: str, offset: int = 0, current_user: dict = Depends(get_current_user)):
     try:
-        # 1. Identificăm ancora de timp
         latest_sale = sales_collection.find_one({"store_id": store_id}, sort=[("sale_date", -1)])
         if not latest_sale:
             return {"weekly_revenue": 0, "orders": 0, "stock_level": 0, "critical_items": 0, "max_offset": 0,
