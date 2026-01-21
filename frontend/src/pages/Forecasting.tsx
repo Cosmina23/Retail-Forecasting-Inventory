@@ -41,7 +41,8 @@ const Forecasting = () => {
   const [loading, setLoading] = useState(false);
   const [forecastData, setForecastData] = useState<ForecastResponse | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [showAllProducts, setShowAllProducts] = useState(false);
   const [productNameMap, setProductNameMap] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedProduct, setSelectedProduct] = useState<ProductForecast | null>(null);
@@ -360,17 +361,17 @@ const Forecasting = () => {
               </Card>
             </div>
 
-            {/* Forecast Chart */}
+            {/* Forecast Chart - Collapsed by default, can be expanded */}
             {chartData.length > 0 && (
-              <Card className="animate-fade-up" style={{ animationDelay: "0.15s" }}>
+              <Card className="animate-fade-up" style={{ animationDelay: "0.2s" }}>
                 <CardHeader>
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-primary" />
-                    Daily Sales Forecast - {forecastData.forecast_period}
+                    Daily Sales Forecast - Top 5 Products ({forecastData.forecast_period})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[350px]">
+                  <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <defs>
@@ -409,7 +410,7 @@ const Forecasting = () => {
             )}
 
             {/* Product Recommendations Table */}
-            <Card className="animate-fade-up" style={{ animationDelay: "0.2s" }}>
+            <Card className="animate-fade-up" style={{ animationDelay: "0.25s" }}>
               <CardHeader>
                 <div className="flex items-center justify-between gap-4">
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -501,6 +502,8 @@ const Forecasting = () => {
                       }}
                       className="px-2 py-1 rounded border border-input text-sm"
                     >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
                       <option value={50}>50</option>
                       <option value={100}>100</option>
                     </select>
@@ -533,7 +536,7 @@ const Forecasting = () => {
             </Card>
 
             {/* Product Comparison Chart - Forecast vs History */}
-            {selectedProduct && (
+            {selectedProduct && comparisonChartData.length > 0 && (
               <Card className="animate-fade-up" style={{ animationDelay: "0.25s" }}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
