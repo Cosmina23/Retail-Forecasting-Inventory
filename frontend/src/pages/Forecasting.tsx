@@ -9,6 +9,7 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianG
 import { useState, useEffect } from "react";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
+import { logActivity} from "@/services/activityLogger.ts";
 
 interface ProductForecast {
   product: string;
@@ -98,6 +99,25 @@ const Forecasting = () => {
       setForecastData(response);
       setCurrentPage(1); // Reset pagination when new forecast is generated
       toast.success("Forecast generated successfully");
+
+      // Log the forecast activity
+      await logActivity(
+        selectedStore,
+        "forecast_created",
+        `Generated ${forecastDays}-day forecast for ${storeName}`,
+        {
+          forecast_period: `${forecastDays} days`,
+          products_count: response.products?.length || 0,
+          total_forecast_units: Math.round(
+            response.products?.reduce((sum: number, p: ProductForecast) => sum + p.total_forecast, 0) || 0
+          ),
+          estimated_revenue: response.total_revenue_forecast || 0,
+          items_to_order: response.products?.reduce(
+            (sum: number, p: ProductForecast) => sum + p.recommended_order, 0
+          ) || 0,
+        }
+      );
+
     } catch (error: any) {
       console.error("Failed to generate forecast:", error);
       // Improve error logging in handleForecast

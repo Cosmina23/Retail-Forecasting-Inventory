@@ -11,25 +11,18 @@ import { ArrowLeft, Save, RotateCcw, Bell, Package, DollarSign, Palette } from "
 import { useToast } from "@/hooks/use-toast";
 
 interface AppSettings {
-  // Display Settings
   theme: "light" | "dark" | "system";
   currency: string;
   dateFormat: string;
   language: string;
-
-  // Inventory Settings
   lowStockThreshold: number;
   criticalStockThreshold: number;
   defaultLeadTimeDays: number;
   autoReorderEnabled: boolean;
-
-  // Notification Settings
   lowStockAlerts: boolean;
   orderConfirmations: boolean;
   dailySummary: boolean;
   emailNotifications: boolean;
-
-  // Business Settings
   taxRate: number;
   defaultMarkup: number;
 }
@@ -61,15 +54,37 @@ const Settings = () => {
     const savedSettings = localStorage.getItem("appSettings");
     if (savedSettings) {
       try {
-        setSettings(JSON.parse(savedSettings));
+        const parsed = JSON.parse(savedSettings);
+        setSettings(parsed);
+        applyTheme(parsed.theme);
       } catch {
         setSettings(defaultSettings);
+        applyTheme(defaultSettings.theme);
       }
+    } else {
+      applyTheme(defaultSettings.theme);
     }
   }, []);
 
+  const applyTheme = (theme: "light" | "dark" | "system") => {
+    const root = document.documentElement;
+
+    if (theme === "system") {
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      root.classList.toggle("dark", systemTheme === "dark");
+    } else {
+      root.classList.toggle("dark", theme === "dark");
+    }
+  };
+
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    setSettings((prev) => {
+      const newSettings = { ...prev, [key]: value };
+      if (key === "theme") {
+        applyTheme(value as "light" | "dark" | "system");
+      }
+      return newSettings;
+    });
     setHasChanges(true);
   };
 
@@ -85,6 +100,7 @@ const Settings = () => {
   const handleReset = () => {
     setSettings(defaultSettings);
     localStorage.removeItem("appSettings");
+    applyTheme(defaultSettings.theme);
     setHasChanges(false);
     toast({
       title: "Settings reset",
@@ -216,8 +232,7 @@ const Settings = () => {
                     min="1"
                     value={settings.lowStockThreshold}
                     onChange={(e) => updateSetting("lowStockThreshold", parseInt(e.target.value) || 0)}
-                  />
-                  <p className="text-xs text-muted-foreground">Alert when stock falls below this level</p>
+                  /><p className="text-xs text-muted-foreground">Alert when stock falls below this level</p>
                 </div>
 
                 <div className="space-y-2">
