@@ -28,6 +28,15 @@ import {
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { ArrowRight, Inbox } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 // --- INTERFEȚE DATE ---
 interface SalePoint {
@@ -66,6 +75,32 @@ const Dashboard = () => {
   const [stats, setStats] = useState<StatItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const navigate = useNavigate();
+  const [isCriticalModalOpen, setIsCriticalModalOpen] = useState(false);
+  const [criticalItems, setCriticalItems] = useState<any[]>([]);
+  const [loadingCritical, setLoadingCritical] = useState(false);
+
+  const handleCriticalItemsClick = async () => {
+  setIsCriticalModalOpen(true);
+  setLoadingCritical(true);
+  try {
+    const token = localStorage.getItem('access_token');
+    const storeId = routeStoreId || JSON.parse(localStorage.getItem("selectedStore") || "{}").id;
+
+    const res = await fetch(`http://localhost:8000/api/stores/${storeId}/critical-items-list`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setCriticalItems(data);
+    }
+  } catch (err) {
+    console.error("Failed to fetch critical items", err);
+  } finally {
+    setLoadingCritical(false);
+  }
+};
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("de-DE", {
@@ -118,14 +153,11 @@ const Dashboard = () => {
         fetch(forecastUrl, { headers }),
         fetch(`${base}/stores/${id}/metrics?offset=${offset}`, { headers })
       ]);
-
-      // 1. Procesare Forecast & History
       if (sfRes.ok) {
         const data = await sfRes.json();
         setSalesData(data.length ? data : fallbackSales());
       }
 
-      // 2. Procesare Metrics, Categories & Pie Chart Data
       if (mRes.ok) {
         const m = await mRes.json();
         setMaxOffset(m.max_offset || 0);
@@ -238,7 +270,12 @@ const Dashboard = () => {
         {/* --- STATS GRID --- */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((s) => (
-            <Card key={s.label} className="group relative overflow-hidden border-none shadow-md hover:shadow-2xl transition-all duration-300 bg-white/60 backdrop-blur-md hover:-translate-y-1">
+            <Card key={s.label}
+      onClick={s.label === "Critical Items" ? handleCriticalItemsClick : undefined}
+      className={cn(
+        "group relative overflow-hidden border-none shadow-md hover:shadow-2xl transition-all duration-300 bg-white/60 backdrop-blur-md hover:-translate-y-1",
+        s.label === "Critical Items" && "cursor-pointer hover:bg-rose-50/50" // Feedback vizual la hover
+      )}>
               <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
                 <s.icon size={120} />
               </div>
@@ -404,6 +441,67 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+      <Dialog open={isCriticalModalOpen} onOpenChange={setIsCriticalModalOpen}>
+  <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden flex flex-col">
+    <DialogHeader>
+      <DialogTitle className="flex items-center gap-2 text-rose-600">
+        <AlertTriangle className="w-5 h-5" />
+        Critical Inventory Alerts
+      </DialogTitle>
+      <DialogDescription>
+        The following items have reached or dropped below their reorder point.
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="flex-1 overflow-y-auto py-4">
+      {loadingCritical ? (
+        <div className="flex justify-center p-8 italic text-slate-500">Loading products...</div>
+      ) : criticalItems.length > 0 ? (
+        <div className="space-y-3">
+          {criticalItems.map((item) => (
+            <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div>
+                <p className="font-bold text-slate-900">{item.product_name}</p>
+                <p className="text-xs text-slate-500 uppercase font-bold tracking-tighter">{item.category}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-black text-rose-600">Stock: {item.quantity}</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">Threshold: {item.reorder_point}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center p-12 text-slate-400">
+          <Inbox className="w-12 h-12 mb-2 opacity-20" />
+          <p>Great job! No items are currently in critical stock.</p>
+        </div>
+      )}
+    </div>
+
+    {criticalItems.length > 0 && (
+  <div className="pt-4 border-t mt-auto">
+    <Button
+      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold"
+      onClick={() => {
+        // Verificator: vedem ce trimitem
+        console.log("Trimitere către PO cu produsele:", criticalItems);
+
+        // Navigăm și transmitem starea
+        navigate(`/purchase-orders/${params.storeId || routeStoreId}`, {
+          state: { items: criticalItems }
+        });
+
+        setIsCriticalModalOpen(false);
+      }}
+    >
+      Generate Purchase Order
+      <ArrowRight className="w-4 h-4 ml-2" />
+    </Button>
+  </div>
+)}
+  </DialogContent>
+</Dialog>
     </DashboardLayout>
   );
 };

@@ -4,10 +4,10 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import pandas as pd
 import os
-from database import db, sales_collection, inventory_collection
+from database import db, sales_collection, inventory_collection, products_collection, forecasts_collection, stores_collection
 
 router = APIRouter(tags=["purchase_orders"])
-
+purchase_orders_collection = db["purchase_orders"]
 # German supplier templates
 GERMAN_SUPPLIERS = {
     "Metro": {
@@ -17,6 +17,7 @@ GERMAN_SUPPLIERS = {
         "phone": "+49 211 6886-0",
         "payment_terms": "30 Tage netto",
         "currency": "EUR",
+        "lead_time": 3,
         "vat_rate": 0.19
     },
     "EDEKA": {
@@ -26,6 +27,7 @@ GERMAN_SUPPLIERS = {
         "phone": "+49 40 6377-0",
         "payment_terms": "14 Tage netto",
         "currency": "EUR",
+        "lead_time": 5,
         "vat_rate": 0.19
     },
     "REWE": {
@@ -35,6 +37,7 @@ GERMAN_SUPPLIERS = {
         "phone": "+49 221 149-0",
         "payment_terms": "30 Tage netto",
         "currency": "EUR",
+        "lead_time": 4,
         "vat_rate": 0.19
     },
     "Aldi": {
@@ -44,6 +47,7 @@ GERMAN_SUPPLIERS = {
         "phone": "+49 201 8593-0",
         "payment_terms": "Sofort",
         "currency": "EUR",
+        "lead_time": 2,
         "vat_rate": 0.19
     },
     "Lidl": {
@@ -53,6 +57,7 @@ GERMAN_SUPPLIERS = {
         "phone": "+49 7132 30-0",
         "payment_terms": "14 Tage netto",
         "currency": "EUR",
+        "lead_time": 2,
         "vat_rate": 0.19
     }
 }
@@ -108,6 +113,10 @@ class PurchaseOrderResponse(BaseModel):
     total_cost: float
     payment_terms: str
     formatted_text: str
+
+class DeliveryConfirmation(BaseModel):
+    po_number: str
+    items_received: List[dict]
 
 def generate_po_number() -> str:
     """Generate unique PO number in German format"""
@@ -213,49 +222,173 @@ async def get_suppliers():
     """Get list of available German suppliers"""
     return {
         "suppliers": [
-            {"id": key, "name": value["name"], "payment_terms": value["payment_terms"]}
+            {"id": key, "name": value["name"], "payment_terms": value["payment_terms"],"lead_time": value["lead_time"]}
             for key, value in GERMAN_SUPPLIERS.items()
         ]
     }
 
+
+@router.get("/pending/{store_id}")
+async def get_pending_orders(store_id: str):
+    """Obține toate comenzile cu status 'pending' pentru un magazin specific"""
+    try:
+        # Căutăm în baza de date comenzile nefinalizate
+        orders = list(db["purchase_orders"].find({
+            "store_id": store_id,
+            "status": "pending"
+        }))
+
+        # Pregătim datele pentru frontend (convertim ObjectId și datetime în string-uri)
+        for order in orders:
+            order["id"] = str(order.pop("_id"))
+            if "created_at" in order and isinstance(order["created_at"], datetime):
+                order["created_at"] = order["created_at"].isoformat()
+
+        return orders
+    except Exception as e:
+        print(f"❌ Error fetching pending orders: {e}")
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
+
+
+@router.get("/all/{store_id}")
+async def get_all_purchase_orders(store_id: str):
+    """Obține istoricul complet al comenzilor pentru un magazin"""
+    try:
+        # Sortăm după data creării (cele mai noi primele)
+        orders = list(db["purchase_orders"].find({"store_id": store_id}).sort("created_at", -1))
+
+        for order in orders:
+            order["id"] = str(order.pop("_id"))
+            if "created_at" in order and isinstance(order["created_at"], datetime):
+                order["created_at"] = order["created_at"].isoformat()
+
+        return orders
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/confirm-delivery")
+async def confirm_delivery(confirmation: DeliveryConfirmation):
+    # 1. Găsim comanda originală
+    po = purchase_orders_collection.find_one({"po_number": confirmation.po_number})
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    if po["status"] == "received":
+        raise HTTPException(status_code=400, detail="This order has already been processed")
+
+    store_id = po["store_id"]
+
+    # 2. Actualizăm stocul pentru fiecare produs primit
+    for item in confirmation.items_received:
+        product_name = item["product_name"]
+        received_qty = item["received_quantity"]
+
+        # Găsim produsul în tabelul products pentru a obține ID-ul corect
+        product_doc = db["products"].find_one({"name": product_name})
+        if not product_doc:
+            continue
+
+        product_id = str(product_doc["_id"])
+
+        # Update în inventory: stoc_actual + received_qty
+        db["inventory"].update_one(
+            {"store_id": store_id, "product_id": product_id},
+            {"$inc": {"quantity": received_qty}},
+            upsert=True  # În caz că nu exista în inventar, îl creăm
+        )
+
+    purchase_orders_collection.update_one(
+        {"po_number": confirmation.po_number},
+        {
+            "$set": {
+                "status": "received",
+                "received_at": datetime.utcnow(),
+                "actual_received_items": confirmation.items_received
+            }
+        }
+    )
+
+    return {"message": f"Inventory updated for store {store_id}", "status": "success"}
+
+@router.get("/categories/{store_id}")
+async def get_po_categories(store_id: str):
+    try:
+        pipeline = [
+            # 1. Începem cu inventory pentru că aici avem filtrul store_id
+            {"$match": {"store_id": store_id}},
+
+            # 2. Facem legătura cu tabela products pentru a accesa categoriile
+            {
+                "$lookup": {
+                    "from": "products",
+                    "let": {"pid": "$product_id"},
+                    "pipeline": [
+                        # Conversia ObjectId în string este crucială pentru match
+                        {"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$pid"]}}}
+                    ],
+                    "as": "product_info"
+                }
+            },
+
+            # 3. Scoatem datele din array-ul rezultat din lookup
+            {"$unwind": "$product_info"},
+
+            # 4. Grupăm după categorie (care acum e disponibilă în product_info)
+            {"$group": {"_id": "$product_info.category"}},
+
+            # 5. Sortăm alfabetic
+            {"$sort": {"_id": 1}}
+        ]
+
+        # REZOLVARE: Agregăm din INVENTORY, nu din products
+        results = list(db["inventory"].aggregate(pipeline))
+
+        # Extragem doar numele categoriilor
+        return [r["_id"] for r in results if r["_id"]]
+    except Exception as e:
+        print(f"Eroare Backend: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/generate", response_model=PurchaseOrderResponse)
 async def generate_purchase_order(request: PurchaseOrderRequest):
-    """Generate a purchase order with German formatting"""
-    
-    # Validate supplier
+    """Generate a purchase order with German formatting and save to MongoDB"""
+
+    # 1. Validare furnizor
     if request.supplier not in GERMAN_SUPPLIERS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid supplier. Available: {', '.join(GERMAN_SUPPLIERS.keys())}"
         )
-    
+
     supplier_info = GERMAN_SUPPLIERS[request.supplier]
-    
-    # Generate PO number
+
+    # 2. Generare număr PO
     po_number = generate_po_number()
-    
-    # Calculate dates
+
+    # 3. Calcul date (folosind lead_time furnizor)
     order_date = datetime.now()
     if request.delivery_date:
         delivery_date = datetime.strptime(request.delivery_date, "%Y-%m-%d")
     else:
-        # Default: 7 days from now
-        delivery_date = order_date + timedelta(days=7)
-    
-    # Process items and calculate totals
+        # Preluăm lead_time din profilul furnizorului (default 7 zile dacă lipsește)
+        lead_days = supplier_info.get("lead_time", 7)
+        delivery_date = order_date + timedelta(days=lead_days)
+
+    # 4. Procesare iteme și calcule financiare
     processed_items = []
     subtotal = 0.0
-    
+
     for item in request.items:
-        # Get German description
         description = item.description or get_german_description(
-            item.product_name, 
+            item.product_name,
             item.category
         )
-        
+
         line_total = item.quantity * item.unit_price
         subtotal += line_total
-        
+
         processed_items.append({
             "product_name": item.product_name,
             "category": item.category,
@@ -265,23 +398,23 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
             "unit_price": item.unit_price,
             "line_total": line_total
         })
-    
-    # Calculate additional costs
+
+    # 5. Calcul costuri adiționale
     shipping_cost = calculate_shipping_cost(subtotal, sum(i.quantity for i in request.items))
     vat_amount = (subtotal + shipping_cost) * supplier_info["vat_rate"]
     total_cost = subtotal + shipping_cost + vat_amount
-    
-    # Store information - fetch from database
-    from database import stores_collection
+
+    # 6. Preluare informații magazin din DB
     from bson import ObjectId
-    
+    from database import stores_collection
+
     store_info = {"id": request.store_id, "name": f"Store {request.store_id}"}
     try:
         if ObjectId.is_valid(request.store_id):
             store_doc = stores_collection.find_one({"_id": ObjectId(request.store_id)})
         else:
             store_doc = stores_collection.find_one({"_id": request.store_id})
-        
+
         if store_doc:
             store_info = {
                 "id": str(store_doc.get("_id")),
@@ -291,8 +424,8 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
             }
     except Exception as e:
         print(f"⚠️ Could not fetch store info: {e}")
-    
-    # Create PO data
+
+    # 7. Construire obiect po_data
     po_data = {
         "po_number": po_number,
         "supplier_info": supplier_info,
@@ -307,11 +440,30 @@ async def generate_purchase_order(request: PurchaseOrderRequest):
         "payment_terms": supplier_info["payment_terms"],
         "notes": request.notes or ""
     }
-    
-    # Format as German text
+
+    # 8. Formatare text pentru document
     formatted_text = format_purchase_order_german(po_data)
     po_data["formatted_text"] = formatted_text
-    
+
+    # --- INTEGRARE TRACKING ȘI PERSISTENȚĂ ---
+    po_data["status"] = "pending"
+    po_data["created_at"] = datetime.utcnow()
+    po_data["store_id"] = request.store_id
+
+    try:
+        # Salvăm sau actualizăm comanda în colecția purchase_orders
+        db["purchase_orders"].update_one(
+            {"po_number": po_data["po_number"]},
+            {"$set": po_data},
+            upsert=True
+        )
+    except Exception as e:
+        print(f"❌ Eroare la salvarea PO în baza de date: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save purchase order to database"
+        )
+
     return PurchaseOrderResponse(**po_data)
 
 @router.post("/generate-from-forecast")
@@ -335,9 +487,7 @@ async def generate_from_forecast(
     
     try:
         print(f"📊 Looking for latest forecast for store {store_id} with {forecast_days} days period")
-        
-        # Import collections
-        from database import products_collection, forecasts_collection
+
         from bson import ObjectId
         
         # Find the most recent forecast for this store with the specified period
@@ -418,7 +568,6 @@ async def generate_from_forecast(
                         product_doc = products_collection.find_one({"name": product_identifier})
                     
                     if product_doc:
-                        # Use the actual product name from database
                         product_name = product_doc.get('name', product_identifier)
                         unit_price = float(product_doc.get('price', 10.0))
                     else:
@@ -478,7 +627,6 @@ async def generate_from_recommendations(
         print(f"📊 Fetching data from MongoDB for store {store_id}")
 
         # Import products_collection to resolve product names
-        from database import products_collection
         from bson import ObjectId
 
         # Read from MongoDB instead of CSV
