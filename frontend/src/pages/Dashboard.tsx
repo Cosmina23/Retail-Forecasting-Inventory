@@ -270,65 +270,65 @@ const Dashboard = () => {
         </div>
 
         {/* --- STATS GRID --- */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((s, index) => {
-            // Primele două carduri sunt "Performance" (Dinamice), ultimele două sunt "Inventory" (Live)
-            const isDynamic = index < 2;
-            const isCritical = s.label === "Critical Items";
+<div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+  {stats.map((s, index) => {
+    // Primele două carduri sunt "Performance" (Dinamice), ultimele două sunt "Inventory" (Live)
+    const isDynamic = index < 2;
+    const isCritical = s.label === "Critical Items";
 
-            return (
-              <Card
-                key={s.label}
-                onClick={isCritical ? handleCriticalItemsClick : undefined}
-                className={cn(
-                  "group relative overflow-hidden border-none shadow-md hover:shadow-2xl transition-all duration-300 backdrop-blur-md hover:-translate-y-1",
-                  isDynamic ? "bg-white/70" : "bg-slate-50/60", // Fundal ușor diferit pentru context
-                  isCritical && "cursor-pointer hover:bg-rose-50/50"
-                )}
-              >
-                {/* ICONIȚA DIN FUNDAL (Păstrată conform cerinței) */}
-                <div className="absolute -right-4 -top-4 opacity-[0.04] group-hover:opacity-[0.09] transition-opacity text-slate-900">
-                  <s.icon size={140} />
-                </div>
-
-                {/* BADGE-UL DE STATUS (Separarea vizuală) */}
-                <div className="absolute top-3 right-3 z-10">
-                  {isDynamic ? (
-                    <span className="text-[10px] font-black px-2 py-0.5 bg-blue-100/80 text-blue-600 rounded-full uppercase tracking-tighter">
-                      {weekOffset === 0 ? "This Week" : "Historical"}
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-100/80 rounded-full">
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                      </span>
-                      <span className="text-[10px] font-black text-emerald-700 uppercase tracking-tighter">Live</span>
-                    </div>
-                  )}
-                </div>
-
-                <CardContent className="p-6 relative z-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className={cn(
-                      "p-3 rounded-2xl shadow-inner",
-                      isDynamic ? "bg-blue-50 text-blue-600" : (isCritical ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600")
-                    )}>
-                      <s.icon className="w-6 h-6" />
-                    </div>
-                  </div>
-
-                  <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
-                    {s.value}
-                  </h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-                    {s.label}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          })}
+    return (
+      <Card
+        key={s.label}
+        onClick={isCritical ? handleCriticalItemsClick : undefined}
+        className={cn(
+          "group relative overflow-hidden border-none shadow-md hover:shadow-2xl transition-all duration-300 backdrop-blur-md hover:-translate-y-1",
+          isDynamic ? "bg-white/70" : "bg-slate-50/60", // Fundal ușor diferit pentru context
+          isCritical && "cursor-pointer hover:bg-rose-50/50"
+        )}
+      >
+        {/* ICONIȚA DIN FUNDAL (Păstrată conform cerinței) */}
+        <div className="absolute -right-4 -top-4 opacity-[0.04] group-hover:opacity-[0.09] transition-opacity text-slate-900">
+          <s.icon size={140} />
         </div>
+
+        {/* BADGE-UL DE STATUS (Separarea vizuală) */}
+        <div className="absolute top-3 right-3 z-10">
+          {isDynamic ? (
+            <span className="text-[10px] font-black px-2 py-0.5 bg-blue-100/80 text-blue-600 rounded-full uppercase tracking-tighter">
+              {weekOffset === 0 ? "This Week" : "Historical"}
+            </span>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-100/80 rounded-full">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[10px] font-black text-emerald-700 uppercase tracking-tighter">Live</span>
+            </div>
+          )}
+        </div>
+
+        <CardContent className="p-6 relative z-10">
+          <div className="flex items-center justify-between mb-4">
+            <div className={cn(
+              "p-3 rounded-2xl shadow-inner",
+              isDynamic ? "bg-blue-50 text-blue-600" : (isCritical ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600")
+            )}>
+              <s.icon className="w-6 h-6" />
+            </div>
+          </div>
+
+          <h3 className="text-3xl font-black text-slate-900 tracking-tighter">
+            {s.value}
+          </h3>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+            {s.label}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  })}
+</div>
 
         {/* --- CHARTS ROW --- */}
         <div className="grid lg:grid-cols-3 gap-8">

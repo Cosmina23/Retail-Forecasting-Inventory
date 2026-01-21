@@ -10,7 +10,6 @@ import {
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-    Package,
     Filter,
     Calendar,
     AlertTriangle,
@@ -19,7 +18,7 @@ import {
     Activity,
     Download,
     Search,
-    Zap // Iconiță nouă pentru Optimization
+    Zap
 } from "lucide-react";
 import {
     Box,
@@ -28,6 +27,7 @@ import {
     FormControl
 } from '@mui/material';
 
+// Interfața rămâne la fel
 interface InventoryRow {
     id: string;
     sku: string;
@@ -47,7 +47,10 @@ const InventoryGridPage = () => {
     const [category, setCategory] = useState('All');
     const [period, setPeriod] = useState(30);
 
-    const uniqueProducts = rows.length;
+    // --- NOU: Stare pentru categoriile din baza de date ---
+    const [dbCategories, setDbCategories] = useState<string[]>([]);
+
+    const uniqueProductsCount = rows.length;
 
     function CustomToolbar() {
         return (
@@ -69,6 +72,21 @@ const InventoryGridPage = () => {
         );
     }
 
+    // --- NOU: Funcție pentru a încărca categoriile ---
+    const fetchCategories = async () => {
+        if (!storeId) return;
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`http://localhost:8000/api/inventory_grid/categories/${storeId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await response.json();
+            setDbCategories(data || []);
+        } catch (error) {
+            console.error("Error fetching categories:", error);
+        }
+    };
+
     const fetchInventoryData = async () => {
         if (!storeId) return;
         try {
@@ -89,27 +107,17 @@ const InventoryGridPage = () => {
         }
     };
 
+    // Încărcăm categoriile o singură dată la mount sau când se schimbă magazinul
+    useEffect(() => { fetchCategories(); }, [storeId]);
+
+    // Încărcăm datele grid-ului
     useEffect(() => { fetchInventoryData(); }, [storeId, category, period]);
 
+    // Coloanele rămân neschimbate
     const columns: GridColDef[] = [
-        {
-            field: 'sku',
-            headerName: 'SKU',
-            width: 130,
-            renderCell: (params) => <span className="font-mono text-[10px] font-bold text-slate-500">{params.value}</span>
-        },
-        {
-            field: 'name',
-            headerName: 'Product Name',
-            flex: 1.2,
-            renderCell: (params) => <span className="font-semibold text-xs text-slate-700 truncate">{params.value}</span>
-        },
-        {
-            field: 'category',
-            headerName: 'Category',
-            width: 110,
-            renderCell: (params) => <span className="text-[9px] font-bold px-2 py-0.5 bg-blue-50 text-blue-600 rounded uppercase">{params.value}</span>
-        },
+        { field: 'sku', headerName: 'SKU', width: 130, renderCell: (params) => <span className="font-mono text-[10px] font-bold text-slate-500">{params.value}</span> },
+        { field: 'name', headerName: 'Product Name', flex: 1.2, renderCell: (params) => <span className="font-semibold text-xs text-slate-700 truncate">{params.value}</span> },
+        { field: 'category', headerName: 'Category', width: 110, renderCell: (params) => <span className="text-[9px] font-bold px-2 py-0.5 bg-blue-50 text-blue-600 rounded uppercase">{params.value}</span> },
         {
             field: 'current_stock',
             headerName: 'Stock Status',
@@ -150,25 +158,18 @@ const InventoryGridPage = () => {
     return (
         <DashboardLayout>
             <div className="flex flex-col h-[calc(100vh-20px)] w-full space-y-4 p-4 overflow-hidden animate-in fade-in duration-500">
-
-                {/* --- SINGLE ROW: STATS, OPTIMIZATION & FILTERS --- */}
                 <div className="flex items-center justify-between gap-4 shrink-0 mt-2">
-
-                    {/* SKU Portfolio Card */}
                     <Card className="border-none shadow-sm bg-white/60 backdrop-blur-md min-w-[200px]">
                         <CardContent className="py-2 px-4 flex items-center gap-3">
                             <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shadow-inner"><Layers size={18} /></div>
                             <div className="flex flex-col">
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">SKU Portfolio</span>
-                                <span className="text-lg font-black text-slate-900 leading-none">{uniqueProducts}</span>
+                                <span className="text-lg font-black text-slate-900 leading-none">{uniqueProductsCount}</span>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Actions & Filters Group */}
                     <div className="flex items-center gap-3">
-
-                        {/* Optimization Button (fostul Standard View) */}
                         <button
                             onClick={() => navigate(`/inventory/${storeId}`)}
                             className="flex items-center gap-2 px-4 py-2 text-[11px] font-bold text-indigo-600 bg-white border border-indigo-100 rounded-xl hover:bg-indigo-50 hover:border-indigo-300 transition-all shadow-sm active:scale-95"
@@ -177,16 +178,23 @@ const InventoryGridPage = () => {
                             Optimization
                         </button>
 
-                        {/* Filters Container */}
                         <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm px-2 py-1 rounded-xl border border-white/40 shadow-sm">
                             <div className="flex items-center gap-1.5">
                                 <Filter size={14} className="text-slate-400" />
-                                <FormControl variant="standard" sx={{ minWidth: 120 }}>
-                                    <Select value={category} onChange={(e) => setCategory(e.target.value as string)} disableUnderline className="text-xs font-bold text-slate-600">
+                                <FormControl variant="standard" sx={{ minWidth: 150 }}>
+                                    <Select
+                                        value={category}
+                                        onChange={(e) => setCategory(e.target.value as string)}
+                                        disableUnderline
+                                        className="text-xs font-bold text-slate-600"
+                                    >
                                         <MenuItem value="All">All Categories</MenuItem>
-                                        <MenuItem value="Electronics">Electronics</MenuItem>
-                                        <MenuItem value="Clothing">Clothing</MenuItem>
-                                        <MenuItem value="Food">Food</MenuItem>
+                                        {/* --- NOU: Mapăm categoriile din baza de date --- */}
+                                        {dbCategories.map((cat) => (
+                                            <MenuItem key={cat} value={cat}>
+                                                {cat}
+                                            </MenuItem>
+                                        ))}
                                     </Select>
                                 </FormControl>
                             </div>
@@ -205,14 +213,12 @@ const InventoryGridPage = () => {
                     </div>
                 </div>
 
-                {/* Tabelul */}
                 <Card className="flex-1 shadow-2xl border-none bg-white/90 backdrop-blur-md rounded-2xl overflow-hidden min-h-0">
                     <CardContent className="p-0 h-full w-full">
                         <DataGrid
                             rows={rows}
                             columns={columns}
                             loading={loading}
-                            checkboxSelection
                             disableRowSelectionOnClick
                             density="compact"
                             slots={{ toolbar: CustomToolbar }}
@@ -233,9 +239,7 @@ const InventoryGridPage = () => {
                                     zIndex: 1,
                                 },
                                 '& .MuiDataGrid-cell': { borderBottom: '1px solid #f1f5f9' },
-                                '& .MuiDataGrid-virtualScroller': {
-                                    overflowX: 'auto',
-                                },
+                                '& .MuiDataGrid-virtualScroller': { overflowX: 'auto' },
                                 '& .MuiCheckbox-root': { transform: 'scale(0.7)' },
                             }}
                         />
