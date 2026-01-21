@@ -43,8 +43,7 @@ import { apiService } from "@/services/api";
 import { toast } from "sonner";
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-// @ts-ignore - no types available for jspdf-autotable
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface Supplier {
   id: string;
@@ -426,12 +425,12 @@ const PurchaseOrders = () => {
     // Items table
     const tableData = generatedPO.items.map((item: any) => [
       item.product_name,
-      item.quantity,
+      item.quantity.toString(),
       `€${item.unit_price.toFixed(2)}`,
       `€${(item.quantity * item.unit_price).toFixed(2)}`
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: 90,
       head: [['Product', 'Qty', 'Unit Price', 'Total']],
       body: tableData,
@@ -440,7 +439,7 @@ const PurchaseOrders = () => {
       styles: { fontSize: 9 }
     });
 
-    // Totals
+    // Totals - get final Y position from autoTable
     const finalY = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(10);
     doc.text(`Subtotal: €${generatedPO.subtotal.toFixed(2)}`, 140, finalY);
