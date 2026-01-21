@@ -172,7 +172,7 @@ useEffect(() => {
       product_name: item.product_name,
       category: item.category || "Electronics",
       // Calculăm o cantitate sugerată (ex: dublul pragului critic sau o valoare fixă)
-      quantity: item.reorder_point > 0 ? item.reorder_point * 2 : 10,
+      quantity:item.reorder_point - item.quantity,
       unit_price: item.unit_price || 0, // Utilizatorul va introduce prețul sau se va lua din DB ulterior
       description: `Critical Restoration - Current Stock: ${item.quantity}`
     }));

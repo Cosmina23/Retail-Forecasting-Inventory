@@ -83,38 +83,51 @@ async def list_stores(current_user: Optional[dict] = Depends(get_current_user)):
 
 @router.get("/me", response_model=List[dict])
 async def get_my_stores(current_user: any = Depends(get_current_user)):
-    """Obține magazinele utilizatorului cu calculul venitului săptămânal inclus."""
+    """Obține magazinele utilizatorului cu calculul venitului bazat pe ultima vânzare."""
     uid = get_uid(current_user)
     query_id = ObjectId(uid) if isinstance(uid, str) and ObjectId.is_valid(uid) else uid
 
     # 1. Obținem magazinele
     stores = list(stores_collection.find({"$or": [{"user_id": query_id}, {"user_id": str(uid)}]}))
 
-    # 2. Calculăm data de început (acum 7 zile)
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
-
     enriched_stores = []
     for store in stores:
         store_id = str(store["_id"])
 
-        # Calculăm suma vânzărilor pentru acest magazin în ultimele 7 zile
-        pipeline = [
-            {
-                "$match": {
-                    "store_id": store_id,
-                    "sale_date": {"$gte": seven_days_ago}
-                }
-            },
-            {
-                "$group": {
-                    "_id": None,
-                    "weekly_revenue": {"$sum": "$total_amount"}
-                }
-            }
-        ]
+        # 2. Găsim data ultimei vânzări pentru acest magazin (Ancora)
+        latest_sale = sales_collection.find_one(
+            {"store_id": store_id},
+            sort=[("sale_date", -1)]
+        )
 
-        result = list(sales_collection.aggregate(pipeline))
-        revenue = result[0]["weekly_revenue"] if result else 0
+        if latest_sale:
+            # Dacă avem vânzări, calculăm fereastra de 7 zile înapoi de la ultima vânzare
+            anchor_date = latest_sale["sale_date"]
+            # Setăm sfârșitul ferestrei la finalul zilei respective
+            view_end = anchor_date + timedelta(days=1)
+            view_start = view_end - timedelta(days=7)
+
+            # 3. Pipeline pentru suma în fereastra calculată
+            pipeline = [
+                {
+                    "$match": {
+                        "store_id": store_id,
+                        "sale_date": {"$gte": view_start, "$lt": view_end}
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": None,
+                        "weekly_revenue": {"$sum": "$total_amount"}
+                    }
+                }
+            ]
+            result = list(sales_collection.aggregate(pipeline))
+            revenue = result[0]["weekly_revenue"] if result else 0
+        else:
+            # Dacă magazinul nu are nicio vânzare
+            revenue = 0
+
         store["revenue"] = round(revenue, 2)
         enriched_stores.append(store)
 
