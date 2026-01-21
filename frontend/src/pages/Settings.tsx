@@ -13,6 +13,7 @@ import { ArrowLeft, Save, RotateCcw, Bell, Package, DollarSign, Palette, Calenda
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 import { apiService } from "@/services/api";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface AppSettings {
   // Display Settings
@@ -69,6 +70,7 @@ interface Holiday {
 const Settings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t, language, setLanguage } = useTranslation();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [hasChanges, setHasChanges] = useState(false);
   
@@ -91,10 +93,18 @@ const Settings = () => {
     const savedSettings = localStorage.getItem("appSettings");
     if (savedSettings) {
       try {
-        setSettings(JSON.parse(savedSettings));
+        const parsed = JSON.parse(savedSettings);
+        setSettings(parsed);
+        // Sync language from saved settings if available
+        if (parsed.language) {
+          setLanguage(parsed.language as 'en' | 'ro' | 'de');
+        }
       } catch {
         setSettings(defaultSettings);
       }
+    } else {
+      // Sync with context language if no saved settings
+      setSettings(prev => ({ ...prev, language }));
     }
     loadHolidays();
   }, []);
@@ -115,6 +125,11 @@ const Settings = () => {
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
     setHasChanges(true);
+    
+    // Sync language with context
+    if (key === 'language') {
+      setLanguage(value as 'en' | 'ro' | 'de');
+    }
   };
 
   const handleSave = () => {
@@ -239,17 +254,17 @@ const Settings = () => {
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                 </svg>
               </div>
-              <span className="text-lg font-semibold text-foreground">Settings</span>
+              <span className="text-lg font-semibold text-foreground">{t('settings.title')}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={handleReset} disabled={!hasChanges}>
               <RotateCcw className="w-4 h-4 mr-2" />
-              Reset
+              {t('common.reset')}
             </Button>
             <Button onClick={handleSave} disabled={!hasChanges}>
               <Save className="w-4 h-4 mr-2" />
-              Save Changes
+              {t('settings.saveSettings')}
             </Button>
           </div>
         </div>
@@ -263,28 +278,28 @@ const Settings = () => {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Palette className="w-5 h-5 text-primary" />
-                <CardTitle>Display Preferences</CardTitle>
+                <CardTitle>{t('settings.appearance')}</CardTitle>
               </div>
               <CardDescription>Customize how the application looks and displays information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="theme">Theme</Label>
+                  <Label htmlFor="theme">{t('settings.theme')}</Label>
                   <Select value={settings.theme} onValueChange={(v: "light" | "dark" | "system") => updateSetting("theme", v)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select theme" />
+                      <SelectValue placeholder={t('settings.theme')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="light">Light</SelectItem>
-                      <SelectItem value="dark">Dark</SelectItem>
-                      <SelectItem value="system">System</SelectItem>
+                      <SelectItem value="light">{t('settings.light')}</SelectItem>
+                      <SelectItem value="dark">{t('settings.dark')}</SelectItem>
+                      <SelectItem value="system">{t('settings.system')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="currency">Currency</Label>
+                  <Label htmlFor="currency">{t('settings.currency')}</Label>
                   <Select value={settings.currency} onValueChange={(v) => updateSetting("currency", v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select currency" />
@@ -299,7 +314,7 @@ const Settings = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="dateFormat">Date Format</Label>
+                  <Label htmlFor="dateFormat">{t('settings.dateFormat')}</Label>
                   <Select value={settings.dateFormat} onValueChange={(v) => updateSetting("dateFormat", v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select format" />
@@ -313,15 +328,15 @@ const Settings = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="language">Language</Label>
+                  <Label htmlFor="language">{t('settings.language')}</Label>
                   <Select value={settings.language} onValueChange={(v) => updateSetting("language", v)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select language" />
+                      <SelectValue placeholder={t('settings.selectLanguage')} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="ro">Română</SelectItem>
-                      <SelectItem value="es">Español</SelectItem>
+                      <SelectItem value="de">Deutsch</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -334,14 +349,14 @@ const Settings = () => {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-primary" />
-                <CardTitle>Inventory Settings</CardTitle>
+                <CardTitle>{t('settings.inventory')}</CardTitle>
               </div>
               <CardDescription>Configure stock thresholds and reorder preferences</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="lowStock">Low Stock Threshold (units)</Label>
+                  <Label htmlFor="lowStock">{t('settings.lowStockThreshold')}</Label>
                   <Input
                     id="lowStock"
                     type="number"
@@ -353,7 +368,7 @@ const Settings = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="criticalStock">Critical Stock Threshold (units)</Label>
+                  <Label htmlFor="criticalStock">{t('settings.criticalStockThreshold')}</Label>
                   <Input
                     id="criticalStock"
                     type="number"
@@ -365,7 +380,7 @@ const Settings = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="leadTime">Default Lead Time (days)</Label>
+                  <Label htmlFor="leadTime">{t('settings.defaultLeadTime')}</Label>
                   <Input
                     id="leadTime"
                     type="number"
@@ -379,7 +394,7 @@ const Settings = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label>Auto-Reorder</Label>
+                      <Label>{t('settings.autoReorder')}</Label>
                       <p className="text-xs text-muted-foreground">Automatically create purchase orders</p>
                     </div>
                     <Switch
@@ -397,14 +412,14 @@ const Settings = () => {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Bell className="w-5 h-5 text-primary" />
-                <CardTitle>Notifications</CardTitle>
+                <CardTitle>{t('settings.notifications')}</CardTitle>
               </div>
               <CardDescription>Manage your alert and notification preferences</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <Label>Low Stock Alerts</Label>
+                  <Label>{t('settings.lowStockAlerts')}</Label>
                   <p className="text-sm text-muted-foreground">Notify when items reach low stock threshold</p>
                 </div>
                 <Switch checked={settings.lowStockAlerts} onCheckedChange={(v) => updateSetting("lowStockAlerts", v)} />
@@ -412,7 +427,7 @@ const Settings = () => {
               <Separator />
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <Label>Order Confirmations</Label>
+                  <Label>{t('settings.orderConfirmations')}</Label>
                   <p className="text-sm text-muted-foreground">Confirm when purchase orders are created</p>
                 </div>
                 <Switch checked={settings.orderConfirmations} onCheckedChange={(v) => updateSetting("orderConfirmations", v)} />
@@ -420,7 +435,7 @@ const Settings = () => {
               <Separator />
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <Label>Daily Summary</Label>
+                  <Label>{t('settings.dailySummary')}</Label>
                   <p className="text-sm text-muted-foreground">Receive a daily inventory summary</p>
                 </div>
                 <Switch checked={settings.dailySummary} onCheckedChange={(v) => updateSetting("dailySummary", v)} />
@@ -428,7 +443,7 @@ const Settings = () => {
               <Separator />
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <Label>Email Notifications</Label>
+                  <Label>{t('settings.emailNotifications')}</Label>
                   <p className="text-sm text-muted-foreground">Send notifications to your email</p>
                 </div>
                 <Switch checked={settings.emailNotifications} onCheckedChange={(v) => updateSetting("emailNotifications", v)} />
@@ -441,14 +456,14 @@ const Settings = () => {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-primary" />
-                <CardTitle>Business Settings</CardTitle>
+                <CardTitle>{t('settings.pricing')}</CardTitle>
               </div>
               <CardDescription>Configure tax rates and pricing defaults</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="taxRate">Default Tax Rate (%)</Label>
+                  <Label htmlFor="taxRate">{t('settings.taxRate')}</Label>
                   <Input
                     id="taxRate"
                     type="number"
@@ -459,7 +474,7 @@ const Settings = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="markup">Default Markup (%)</Label>
+                  <Label htmlFor="markup">{t('settings.defaultMarkup')}</Label>
                   <Input
                     id="markup"
                     type="number"

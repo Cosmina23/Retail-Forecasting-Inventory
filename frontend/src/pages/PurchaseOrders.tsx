@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "@/hooks/useTranslation";
 import { logActivity} from "@/services/activityLogger";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,7 @@ interface PurchaseOrder {
 }
 
 const PurchaseOrders = () => {
+  const { t } = useTranslation();
   const params = useParams();
   const routeStoreId = params.storeId || null;
   const [stores, setStores] = useState<Store[]>([]);
@@ -646,27 +648,23 @@ const handleConfirmDelivery = async () => {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-  <div>
-    <h1 className="text-2xl font-bold">Purchase Order Generator</h1>
-    <p className="text-muted-foreground">Erstellen Sie Bestellungen für deutsche Lieferanten</p>
-  </div>
-  <div className="flex gap-2">
-    {/* BUTONUL NOU */}
-    <Button onClick={loadAllOrders} variant="outline" className="flex items-center gap-2">
-      <List className="w-4 h-4" />
-      View All Orders
-    </Button>
-
-    {generatedPO && (
-      <Button onClick={downloadPO} variant="outline">
-        <Download className="w-4 h-4 mr-2" />
-        Download PO
-      </Button>
-    )}
-  </div>
-</div>
-
-
+          <div>
+            <h1 className="text-2xl font-bold">{t('purchaseOrders.title')}</h1>
+            <p className="text-muted-foreground">{t('purchaseOrders.subtitle')}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={loadAllOrders} variant="outline" className="flex items-center gap-2">
+              <List className="w-4 h-4" />
+              {t('purchaseOrders.viewAllOrders')}
+            </Button>
+            {generatedPO && (
+              <Button onClick={downloadPO} variant="outline">
+                <Download className="w-4 h-4 mr-2" />
+                {t('purchaseOrders.downloadPO')}
+              </Button>
+            )}
+          </div>
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Form */}
@@ -677,13 +675,13 @@ const handleConfirmDelivery = async () => {
               <CardHeader>
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
                   <FileText className="w-5 h-5 text-primary" />
-                  Order Configuration
+                  {t('purchaseOrders.orderConfiguration')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <Label>Store / Filiale</Label>
+                    <Label>{t('purchaseOrders.store')}</Label>
                     <Select value={selectedStore} onValueChange={setSelectedStore}>
                       <SelectTrigger>
                         <SelectValue />
@@ -699,7 +697,7 @@ const handleConfirmDelivery = async () => {
                   </div>
 
                   <div>
-                    <Label>Supplier / Lieferant</Label>
+                    <Label>{t('purchaseOrders.supplier')}</Label>
                     <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
                       <SelectTrigger>
                         <SelectValue />
@@ -715,15 +713,15 @@ const handleConfirmDelivery = async () => {
                   </div>
 
                   <div>
-                    <Label>Forecast Period / Prognosezeitraum</Label>
+                    <Label>{t('purchaseOrders.forecastPeriod')}</Label>
                     <Select value={forecastDays.toString()} onValueChange={(value) => setForecastDays(Number(value))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="7">7 days / Tage</SelectItem>
-                        <SelectItem value="14">14 days / Tage</SelectItem>
-                        <SelectItem value="30">30 days / Tage</SelectItem>
+                        <SelectItem value="7">7 {t('forecasting.days')}</SelectItem>
+                        <SelectItem value="14">14 {t('forecasting.days')}</SelectItem>
+                        <SelectItem value="30">30 {t('forecasting.days')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -731,7 +729,7 @@ const handleConfirmDelivery = async () => {
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-sm text-blue-800">
-                    <strong>📊 Info:</strong> Make sure you have generated a forecast with the selected period ({forecastDays} days) before creating the purchase order. The order quantities will be based on that forecast period.
+                    <strong>📊 Info:</strong> {t('purchaseOrders.makeSureForecast', { days: forecastDays })}
                   </p>
                 </div>
 
@@ -743,11 +741,11 @@ const handleConfirmDelivery = async () => {
                   size="lg"
                 >
                   <ShoppingCart className="w-4 h-4 mr-2" />
-                  Generate from AI Forecast
+                  {t('purchaseOrders.generateFromForecast')}
                 </Button>
 
                 <div>
-                  <Label>Notes / Anmerkungen</Label>
+                  <Label>{t('purchaseOrders.notes')}</Label>
                   <Textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}

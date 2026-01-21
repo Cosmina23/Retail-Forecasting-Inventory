@@ -1,5 +1,6 @@
 import DashboardLayout from "@/components/layouts/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   TrendingUp,
   Package,
@@ -60,6 +61,7 @@ interface StatItem {
 }
 
 const Dashboard = () => {
+  const { t } = useTranslation();
   const params = useParams();
   const routeStoreId = params.storeId || null;
 
@@ -211,7 +213,7 @@ const Dashboard = () => {
     return (
       <DashboardLayout>
         <div className="h-screen flex items-center justify-center animate-pulse text-primary font-bold text-xl italic">
-          Igniting Engines... 🚀
+          {t('common.loading')}
         </div>
       </DashboardLayout>
     );
@@ -225,10 +227,10 @@ const Dashboard = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-blue-600 to-indigo-400 bg-clip-text text-transparent italic">
-              Executive Overview
+              {t('dashboard.title')}
             </h1>
             <p className="text-muted-foreground font-medium">
-              {weekOffset === 0 ? "Your weekly performance analysis." : `Historical data from ${weekOffset} week(s) ago.`}
+              {weekOffset === 0 ? t('dashboard.weeklyPerformance') : t('dashboard.historicalData', { weeks: weekOffset })}
             </p>
           </div>
 
@@ -247,11 +249,11 @@ const Dashboard = () => {
               variant="ghost"
               onClick={() => setWeekOffset(0)}
               className="flex items-center gap-2 px-4 py-1 font-bold text-sm text-slate-700 group hover:bg-white rounded-xl transition-all"
-              title="Reset to current week"
+              title={t('dashboard.resetToCurrentWeek')}
             >
               <Calendar className={`w-4 h-4 transition-colors ${weekOffset === 0 ? "text-blue-500" : "text-slate-400 group-hover:text-blue-500"}`} />
               <span className="min-w-[100px] text-center">
-                {weekOffset === 0 ? "Current Week" : `${weekOffset} Weeks Ago`}
+                {weekOffset === 0 ? t('dashboard.currentWeek') : t('dashboard.weeksAgo', { weeks: weekOffset })}
               </span>
             </Button>
 
@@ -317,7 +319,7 @@ const Dashboard = () => {
                       </button>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400">Comparing actual sales vs AI forecast</p>
+                    <p className="text-xs text-slate-400">{t('dashboard.comparingSales')}</p>
                   )}
                 </div>
               </div>
@@ -346,7 +348,7 @@ const Dashboard = () => {
 
           <Card className="shadow-xl border-none bg-white/80">
             <CardHeader>
-              <CardTitle className="text-lg font-bold tracking-tight">Inventory Split</CardTitle>
+              <CardTitle className="text-lg font-bold tracking-tight">{t('dashboard.inventorySplit')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">
@@ -377,11 +379,11 @@ const Dashboard = () => {
           <CardHeader className="pb-2 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-xl font-bold tracking-tight">Top Selling Categories</CardTitle>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Velocity by Product Category</p>
+                <CardTitle className="text-xl font-bold tracking-tight">{t('dashboard.topCategories')}</CardTitle>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">{t('dashboard.velocityByCategory')}</p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter italic">Last updated just now</p>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter italic">{t('dashboard.lastUpdated')}</p>
               </div>
             </div>
           </CardHeader>
@@ -436,7 +438,7 @@ const Dashboard = () => {
                 </div>
               </div>
             )) : (
-              <p className="text-center py-4 text-slate-500 italic text-sm">No sales data for categories this week.</p>
+              <p className="text-center py-4 text-slate-500 italic text-sm">{t('dashboard.noSalesData')}</p>
             )}
           </CardContent>
         </Card>
