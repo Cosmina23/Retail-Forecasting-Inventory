@@ -322,7 +322,7 @@ const handleConfirmDelivery = async () => {
       }))
     };
 
-    const res = await fetch(`http://localhost:8000/api/purchase_orders/confirm-delivery`, {
+    const res = await fetch(`http://localhost:8000/api/purchase-orders/confirm-delivery`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -409,7 +409,7 @@ const handleConfirmDelivery = async () => {
       // Log the activity
       await logActivity(
         selectedStore,
-        "purchase_order_created",
+        "purchase-order_created",
         `Created purchase order ${po.po_number}`,
         {
           po_number: po.po_number,
@@ -458,7 +458,7 @@ const handleConfirmDelivery = async () => {
       // Log the activity
       await logActivity(
         selectedStore,
-        "purchase_order_created",
+        "purchase-order_created",
         `AI-generated purchase order ${po.po_number} from forecast`,
         {
           po_number: po.po_number,
