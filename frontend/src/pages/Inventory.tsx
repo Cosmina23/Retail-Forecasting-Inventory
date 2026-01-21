@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import DashboardLayout from "@/components/layouts/DashboardLayout";
+import { useTranslation } from "@/hooks/useTranslation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -41,6 +42,7 @@ interface OptimizationResponse {
 }
 
 const Inventory = () => {
+  const { t } = useTranslation();
   const { storeId } = useParams<{ storeId: string }>();
 
   const [leadTime, setLeadTime] = useState<number>(7);
@@ -135,7 +137,7 @@ const Inventory = () => {
       <DashboardLayout>
         <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
           <Loader2 className="w-10 h-10 animate-spin text-primary" />
-          <p className="text-muted-foreground font-medium animate-pulse">Running intelligent optimization...</p>
+          <p className="text-muted-foreground font-medium animate-pulse">{t('inventory.runningOptimization')}</p>
         </div>
       </DashboardLayout>
     );
@@ -153,35 +155,35 @@ const Inventory = () => {
                 <div className="p-2 bg-primary/10 rounded-lg shadow-inner">
                   <TrendingUp className="w-5 h-5 text-primary" />
                 </div>
-                <h2 className="text-lg font-bold tracking-tight text-slate-800">Optimization Parameters</h2>
+                <h2 className="text-lg font-bold tracking-tight text-slate-800">{t('inventory.optimizationParameters')}</h2>
               </div>
 
               <div className="flex items-center gap-6 flex-1 justify-center">
                 <div className="flex flex-col">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 mb-1 tracking-wider">Lead Time</label>
+                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 mb-1 tracking-wider">{t('inventory.leadTime')}</label>
                   <Select value={leadTime.toString()} onValueChange={(v) => onParamChange(v, 'lead')}>
                     <SelectTrigger className="w-[160px] h-9 bg-white border-slate-200 shadow-sm focus:ring-primary/20">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="3">3 Days (Fast)</SelectItem>
-                      <SelectItem value="7">7 Days (Standard)</SelectItem>
-                      <SelectItem value="14">14 Days (Slow)</SelectItem>
-                      <SelectItem value="30">30 Days (Global)</SelectItem>
+                      <SelectItem value="3">3 {t('forecasting.days')} ({t('inventory.fast')})</SelectItem>
+                      <SelectItem value="7">7 {t('forecasting.days')} ({t('inventory.standard')})</SelectItem>
+                      <SelectItem value="14">14 {t('forecasting.days')} ({t('inventory.slow')})</SelectItem>
+                      <SelectItem value="30">30 {t('forecasting.days')} ({t('inventory.global')})</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="flex flex-col">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 mb-1 tracking-wider">Service Level</label>
+                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 mb-1 tracking-wider">{t('inventory.serviceLevel')}</label>
                   <Select value={serviceLevel.toString()} onValueChange={(v) => onParamChange(v, 'service')}>
                     <SelectTrigger className="w-[160px] h-9 bg-white border-slate-200 shadow-sm focus:ring-primary/20">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0.90">90% (Low Risk)</SelectItem>
-                      <SelectItem value="0.95">95% (Balanced)</SelectItem>
-                      <SelectItem value="0.99">99% (Aggressive)</SelectItem>
+                      <SelectItem value="0.90">90% ({t('inventory.lowRisk')})</SelectItem>
+                      <SelectItem value="0.95">95% ({t('inventory.balanced')})</SelectItem>
+                      <SelectItem value="0.99">99% ({t('inventory.aggressive')})</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -195,10 +197,10 @@ const Inventory = () => {
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
               {[
-                { label: "Total Products", value: data.total_products, icon: Package, color: "blue" },
-                { label: "Action Required", value: data.metrics.filter(m => m.status === "Critical" || m.status === "Low - Order Now").length, icon: AlertTriangle, color: "rose" },
-                { label: "Annual Revenue", value: new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(data.total_annual_revenue), icon: ShoppingCart, color: "emerald" },
-                { label: "Avg Coverage", value: `${(data.metrics.reduce((acc, curr) => acc + (curr.stock_days || 0), 0) / data.metrics.length).toFixed(1)} Days`, icon: TrendingUp, color: "indigo" }
+                { label: t('inventory.totalProducts'), value: data.total_products, icon: Package, color: "blue" },
+                { label: t('inventory.actionRequired'), value: data.metrics.filter(m => m.status === "Critical" || m.status === "Low - Order Now").length, icon: AlertTriangle, color: "rose" },
+                { label: t('inventory.annualRevenue'), value: new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(data.total_annual_revenue), icon: ShoppingCart, color: "emerald" },
+                { label: t('inventory.avgCoverage'), value: `${(data.metrics.reduce((acc, curr) => acc + (curr.stock_days || 0), 0) / data.metrics.length).toFixed(1)} ${t('forecasting.days')}`, icon: TrendingUp, color: "indigo" }
               ].map((kpi, i) => (
                 <Card key={i} className="bg-white border-none shadow-sm hover:shadow-md transition-shadow">
                   <CardContent className="p-4 flex items-center gap-4">
@@ -221,14 +223,14 @@ const Inventory = () => {
               <Card className="lg:col-span-1 h-full border-none shadow-sm flex flex-col bg-white overflow-hidden">
                 <CardHeader className="py-4 px-6 border-b border-slate-50 shrink-0">
                   <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-700">
-                    <PieChartIcon className="w-4 h-4 text-primary" /> ABC Distribution Analysis
+                    <PieChartIcon className="w-4 h-4 text-primary" /> {t('inventory.abcDistribution')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col p-6 overflow-hidden">
                   {/* Containerul graficului cu text central */}
                   <div className="relative flex-1 min-h-[220px]">
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Total SKU</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('inventory.totalSKU')}</span>
                       <span className="text-3xl font-black text-slate-900">{data.total_products}</span>
                     </div>
                     <ResponsiveContainer width="100%" height="100%">
@@ -277,7 +279,7 @@ const Inventory = () => {
                   {/* Info Box */}
                   <div className="mt-auto pt-4 border-t border-slate-100 italic">
                     <p className="text-[10px] text-slate-400 leading-relaxed text-center">
-                      Analysis based on annual revenue contribution per SKU.
+                      {t('inventory.analysisBasedOnRevenue')}
                     </p>
                   </div>
                 </CardContent>
@@ -286,17 +288,17 @@ const Inventory = () => {
               {/* Optimization Results Table */}
               <Card className="lg:col-span-2 h-full border-none shadow-sm flex flex-col bg-white overflow-hidden">
                 <CardHeader className="py-4 px-6 border-b border-slate-50 shrink-0">
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">Optimization Recommendations</CardTitle>
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">{t('inventory.optimizationRecommendations')}</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-y-auto p-0 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                   <Table>
                     <TableHeader className="sticky top-0 bg-white/95 backdrop-blur-md z-10 shadow-sm">
                       <TableRow className="hover:bg-transparent border-b border-slate-100">
-                        <TableHead className="text-[10px] font-black uppercase text-slate-400 h-11 px-6">Product</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-slate-400 h-11 px-6">{t('forecasting.product')}</TableHead>
                         <TableHead className="text-[10px] font-black uppercase text-center text-slate-400 h-11">ABC</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11">Stock</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11">{t('inventory.stock')}</TableHead>
                         <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11">ROP</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11 px-6">Order Qty</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-right text-slate-400 h-11 px-6">{t('inventory.orderQty')}</TableHead>
                         <TableHead className="text-[10px] font-black uppercase text-center text-slate-400 h-11 pr-6">Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -328,8 +330,8 @@ const Inventory = () => {
             <div className="p-4 bg-slate-100 rounded-full mb-4">
                <PieChartIcon className="w-10 h-10 text-slate-300" />
             </div>
-            <p className="text-slate-500 font-bold tracking-tight">System Ready for Analysis</p>
-            <p className="text-slate-400 text-xs">Awaiting store data optimization...</p>
+            <p className="text-slate-500 font-bold tracking-tight">{t('inventory.systemReady')}</p>
+            <p className="text-slate-400 text-xs">{t('inventory.awaitingData')}</p>
           </div>
         )}
       </div>

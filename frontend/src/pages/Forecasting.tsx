@@ -10,6 +10,7 @@ import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianG
 import { useState, useEffect } from "react";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ProductForecast {
   product: string;
@@ -34,6 +35,7 @@ interface Store {
 }
 
 const Forecasting = () => {
+  const { t } = useTranslation();
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [storeName, setStoreName] = useState<string>("");
@@ -286,7 +288,7 @@ const Forecasting = () => {
                     ) : (
                       <>
                         <TrendingUp className="w-4 h-4 mr-2" />
-                        Generate Forecast
+                        {t('forecasting.generateForecast')}
                       </>
                     )}
                   </Button>
@@ -300,9 +302,9 @@ const Forecasting = () => {
               <div className="w-16 h-16 rounded-full bg-accent mx-auto mb-4 flex items-center justify-center">
                 <Target className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">No Store Selected</h3>
+              <h3 className="text-lg font-semibold mb-2">{t('forecasting.noStoreSelected')}</h3>
               <p className="text-muted-foreground mb-6">
-                Please select a store first to generate forecasts.
+                {t('forecasting.selectStoreFirst')}
               </p>
             </CardContent>
           </Card>
@@ -319,7 +321,7 @@ const Forecasting = () => {
                       <Target className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Total Forecast</p>
+                      <p className="text-sm text-muted-foreground">{t('forecasting.totalForecast')}</p>
                       <p className="text-xl font-bold text-foreground">
                         {Math.round(forecastData.products.reduce((sum, p) => sum + p.total_forecast, 0))} units
                       </p>
@@ -335,7 +337,7 @@ const Forecasting = () => {
                       <ShoppingCart className="w-5 h-5 text-success" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Est. Revenue</p>
+                      <p className="text-sm text-muted-foreground">{t('forecasting.estimatedRevenue')}</p>
                       <p className="text-xl font-bold text-success">
                         {formatCurrency(forecastData.total_revenue_forecast)}
                       </p>
@@ -351,7 +353,7 @@ const Forecasting = () => {
                       <Package className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Items to Order</p>
+                      <p className="text-sm text-muted-foreground">{t('forecasting.itemsToOrder')}</p>
                       <p className="text-xl font-bold text-foreground">
                         {forecastData.products.reduce((sum, p) => sum + p.recommended_order, 0)} units
                       </p>
@@ -415,13 +417,13 @@ const Forecasting = () => {
                 <div className="flex items-center justify-between gap-4">
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
                     <Package className="w-5 h-5 text-primary" />
-                    Inventory Order Recommendations ({filteredProducts.length} products)
+                    {t('forecasting.recommendations')} ({filteredProducts.length} {t('forecasting.product')}s)
                   </CardTitle>
                   <div className="relative w-64">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       type="text"
-                      placeholder="Search products..."
+                      placeholder={t('forecasting.searchProducts')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-9 pr-9"
@@ -441,11 +443,11 @@ const Forecasting = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Current Stock</TableHead>
-                      <TableHead className="text-right">{forecastDays}-Day Forecast</TableHead>
-                      <TableHead className="text-right">Recommended Order</TableHead>
+                      <TableHead>{t('forecasting.product')}</TableHead>
+                      <TableHead>{t('forecasting.category')}</TableHead>
+                      <TableHead className="text-right">{t('forecasting.currentStock')}</TableHead>
+                      <TableHead className="text-right">{forecastDays}-{t('forecasting.days')} {t('forecasting.forecast')}</TableHead>
+                      <TableHead className="text-right">{t('forecasting.recommendedOrder')}</TableHead>
                       <TableHead className="text-center">Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -509,9 +511,9 @@ const Forecasting = () => {
                     </select>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                    {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of{" "}
-                    {filteredProducts.length} products
+                    {t('forecasting.showing')} {(currentPage - 1) * itemsPerPage + 1} {t('common.to')}{" "}
+                    {Math.min(currentPage * itemsPerPage, filteredProducts.length)} {t('common.of')}{" "}
+                    {filteredProducts.length} {t('forecasting.product')}s
                   </div>
                   {filteredProducts.length > itemsPerPage && (
                     <div className="flex gap-2">
@@ -520,14 +522,14 @@ const Forecasting = () => {
                         disabled={currentPage === 1}
                         className="px-3 py-1 rounded border border-input text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
                       >
-                        Previous
+                        {t('common.previous')}
                       </button>
                       <button
                         onClick={() => setCurrentPage(Math.min(Math.ceil(filteredProducts.length / itemsPerPage), currentPage + 1))}
                         disabled={currentPage === Math.ceil(filteredProducts.length / itemsPerPage)}
                         className="px-3 py-1 rounded border border-input text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent"
                       >
-                        Next
+                        {t('common.next')}
                       </button>
                     </div>
                   )}
@@ -542,7 +544,7 @@ const Forecasting = () => {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-semibold flex items-center gap-2">
                       <TrendingUp className="w-5 h-5 text-primary" />
-                      Product Analysis: {getProductDisplayName(selectedProduct.product)}
+                      {t('forecasting.productAnalysis')}: {getProductDisplayName(selectedProduct.product)}
                     </CardTitle>
                     <Button
                       variant="ghost"
@@ -700,9 +702,9 @@ const Forecasting = () => {
               <div className="w-16 h-16 rounded-full bg-accent mx-auto mb-4 flex items-center justify-center">
                 <Target className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">No Forecast Generated</h3>
+              <h3 className="text-lg font-semibold mb-2">{t('forecasting.noForecastGenerated')}</h3>
               <p className="text-muted-foreground mb-6">
-                Select a store and click "Generate Forecast" to see predictions and inventory recommendations.
+                {t('forecasting.selectStoreAndGenerate')}
               </p>
             </CardContent>
           </Card>

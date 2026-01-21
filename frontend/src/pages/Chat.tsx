@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from '@/hooks/useTranslation';
 import DashboardLayout from '@/components/layouts/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ import { sendChatMessage, ChatMessage } from '@/services/chat';
 import { Send, Loader2, Bot, User, Sparkles } from 'lucide-react';
 
 const Chat = () => {
+  const { t } = useTranslation();
   const { storeId } = useParams<{ storeId: string }>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -43,7 +45,7 @@ const Chat = () => {
     } catch (error) {
       const errorMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: t('chat.errorMessage'),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -59,10 +61,10 @@ const Chat = () => {
   };
 
   const suggestedQuestions = [
-    "What products are running low on stock?",
-    "What should I order this week?",
-    "Show me the sales forecast",
-    "Which categories are performing best?",
+    t('chat.question1'),
+    t('chat.question2'),
+    t('chat.question3'),
+    t('chat.question4'),
   ];
 
   return (
@@ -75,8 +77,8 @@ const Chat = () => {
               <Bot className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Inventory Assistant</h1>
-              <p className="text-sm text-muted-foreground">AI-powered insights for your store</p>
+              <h1 className="text-2xl font-bold tracking-tight">{t('chat.inventoryAssistant')}</h1>
+              <p className="text-sm text-muted-foreground">{t('chat.aiPoweredInsights')}</p>
             </div>
           </div>
         </div>
@@ -90,9 +92,9 @@ const Chat = () => {
                   <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mb-6">
                     <Sparkles className="w-10 h-10 text-blue-500" />
                   </div>
-                  <h2 className="text-xl font-bold text-slate-800 mb-2">How can I help you today?</h2>
+                  <h2 className="text-xl font-bold text-slate-800 mb-2">{t('chat.howCanIHelp')}</h2>
                   <p className="text-muted-foreground mb-8 max-w-md">
-                    Ask me about stock levels, forecasts, orders, or any inventory-related questions.
+                    {t('chat.askAboutDetails')}
                   </p>
 
                   {/* Suggested Questions */}
@@ -155,7 +157,7 @@ const Chat = () => {
           <CardFooter className="p-4 border-t border-slate-100 bg-white/50">
             <div className="flex w-full gap-3">
               <Input
-                placeholder="Ask about inventory, forecasts, orders..."
+                placeholder={t('chat.placeholderDetailed')}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}

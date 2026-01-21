@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,7 @@ interface ChatbotProps {
 }
 
 export function Chatbot({ storeId = 'store_123' }: ChatbotProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -46,7 +48,7 @@ export function Chatbot({ storeId = 'store_123' }: ChatbotProps) {
     } catch (error) {
       const errorMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: t('chat.errorMessage'),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -76,7 +78,7 @@ export function Chatbot({ storeId = 'store_123' }: ChatbotProps) {
   return (
     <Card className="fixed bottom-6 right-6 w-96 h-[500px] shadow-elevated flex flex-col">
       <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
-        <CardTitle className="text-lg">Inventory Assistant</CardTitle>
+        <CardTitle className="text-lg">{t('chat.inventoryAssistant')}</CardTitle>
         <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
           <X className="h-4 w-4" />
         </Button>
@@ -86,8 +88,8 @@ export function Chatbot({ storeId = 'store_123' }: ChatbotProps) {
         <ScrollArea className="h-full p-4" ref={scrollRef}>
           {messages.length === 0 && (
             <div className="text-center text-muted-foreground text-sm py-8">
-              <p>👋 Hi! I'm your inventory assistant.</p>
-              <p className="mt-2">Ask me about stock levels, forecasts, or orders.</p>
+              <p>{t('chat.greeting')}</p>
+              <p className="mt-2">{t('chat.askAbout')}</p>
             </div>
           )}
           <div className="space-y-4">
@@ -121,7 +123,7 @@ export function Chatbot({ storeId = 'store_123' }: ChatbotProps) {
       <CardFooter className="p-3 border-t">
         <div className="flex w-full gap-2">
           <Input
-            placeholder="Ask about inventory..."
+            placeholder={t('chat.placeholder')}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
