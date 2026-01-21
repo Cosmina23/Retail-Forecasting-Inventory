@@ -168,7 +168,7 @@ const ShopSelector = () => {
                     <span className="text-xs font-medium text-slate-400 uppercase">Live</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] text-slate-400 uppercase font-bold">Revenue</p>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold">Weekly revenue</p>
                     <p className="text-sm font-bold text-slate-700">{formatCurrency(shop.revenue || 0)}</p>
                   </div>
                 </div>

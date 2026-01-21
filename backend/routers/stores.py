@@ -36,7 +36,6 @@ def serialize_mongo(doc):
     if isinstance(doc, list):
         return [serialize_mongo(item) for item in doc]
     if isinstance(doc, dict):
-        # Mapăm _id la id pentru frontend și convertim restul de ObjectId
         new_doc = {}
         for k, v in doc.items():
             key = "id" if k == "_id" else k
@@ -53,9 +52,7 @@ def get_uid(current_user):
 
 
 def get_anchor_date(store_id):
-    # Căutăm cea mai recentă vânzare
     latest_sale = sales_collection.find_one({"store_id": store_id}, sort=[("sale_date", -1)])
-    # Căutăm cea mai recentă prognoză
     latest_forecast = db["forecasts"].find_one({"store_id": store_id}, sort=[("forecast_date", -1)])
 
     dates = []
@@ -65,8 +62,6 @@ def get_anchor_date(store_id):
     if latest_forecast:
         dt = latest_forecast.get("forecast_date")
         dates.append(dt if isinstance(dt, datetime) else parser.parse(str(dt)))
-
-    # Dacă nu avem nicio dată, folosim data curentă ca fallback
     return max(dates) if dates else datetime.utcnow()
 
 # --- Endpoints ---
@@ -88,14 +83,42 @@ async def list_stores(current_user: Optional[dict] = Depends(get_current_user)):
 
 @router.get("/me", response_model=List[dict])
 async def get_my_stores(current_user: any = Depends(get_current_user)):
-    """Obține magazinele utilizatorului curent folosind conversie sigură de ID."""
+    """Obține magazinele utilizatorului cu calculul venitului săptămânal inclus."""
     uid = get_uid(current_user)
-
-    # Încercăm ambele formate pentru user_id (ObjectId și String) pentru compatibilitate
     query_id = ObjectId(uid) if isinstance(uid, str) and ObjectId.is_valid(uid) else uid
+
+    # 1. Obținem magazinele
     stores = list(stores_collection.find({"$or": [{"user_id": query_id}, {"user_id": str(uid)}]}))
 
-    return serialize_mongo(stores)
+    # 2. Calculăm data de început (acum 7 zile)
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+
+    enriched_stores = []
+    for store in stores:
+        store_id = str(store["_id"])
+
+        # Calculăm suma vânzărilor pentru acest magazin în ultimele 7 zile
+        pipeline = [
+            {
+                "$match": {
+                    "store_id": store_id,
+                    "sale_date": {"$gte": seven_days_ago}
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "weekly_revenue": {"$sum": "$total_amount"}
+                }
+            }
+        ]
+
+        result = list(sales_collection.aggregate(pipeline))
+        revenue = result[0]["weekly_revenue"] if result else 0
+        store["revenue"] = round(revenue, 2)
+        enriched_stores.append(store)
+
+    return serialize_mongo(enriched_stores)
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)

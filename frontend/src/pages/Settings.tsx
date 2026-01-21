@@ -242,33 +242,33 @@ const Settings = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card sticky top-0 z-10">
-        <div className="container py-4 flex items-center justify-between">
+    <header className="border-b bg-card sticky top-0 z-10 shadow-sm">
+      <div className="container py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/index")}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg gradient-primary flex items-center justify-center">
-                <svg className="w-5 h-5 text-primary-foreground" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
-              </div>
-              <span className="text-lg font-semibold text-foreground">{t('settings.title')}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleReset} disabled={!hasChanges}>
-              <RotateCcw className="w-4 h-4 mr-2" />
-              {t('common.reset')}
-            </Button>
-            <Button onClick={handleSave} disabled={!hasChanges}>
-              <Save className="w-4 h-4 mr-2" />
-              {t('settings.saveSettings')}
-            </Button>
+            <img
+              src="/photos/stok_no_bg.png"
+              alt="Stok Logo"
+              className="h-10 w-auto object-contain cursor-pointer transition-transform hover:scale-105"
+              onClick={() => navigate("/index")}
+            />
           </div>
         </div>
-      </header>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleReset} disabled={!hasChanges}>
+            <RotateCcw className="w-4 h-4 mr-2" />
+            {t('common.reset')}
+          </Button>
+          <Button onClick={handleSave} disabled={!hasChanges}>
+            <Save className="w-4 h-4 mr-2" />
+            {t('settings.saveSettings')}
+          </Button>
+        </div>
+      </div>
+    </header>
 
       {/* Main Content */}
       <main className="container py-8 max-w-4xl">
