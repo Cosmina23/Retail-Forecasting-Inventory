@@ -72,12 +72,19 @@ def decode_access_token(token: str):
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     """Get current user_id from JWT token"""
+    print(f"Token received: {token}")
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if token is None:
+        print("Token is None!")
+        raise credentials_exception
+    
     user_id = decode_access_token(token)
+    print(f"Decoded user_id: {user_id}")
     if user_id is None:
+        print("User ID is None after decode!")
         raise credentials_exception
     return user_id

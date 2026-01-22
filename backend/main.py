@@ -23,7 +23,9 @@ from routers import (
     activity, 
     notifications,
     activity_logs,
-    holidays
+    holidays,
+    planogram,
+    finances
 )
 
 # Încărcare variabile de mediu
@@ -88,6 +90,8 @@ app.include_router(notifications.router, prefix="/api", tags=["Notifications"])
 app.include_router(holidays.router)
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 app.include_router(activity_logs.router)
+app.include_router(planogram.router, tags=["Planogram"])
+app.include_router(finances.router, tags=["Finances"])
 
 # --- Evenimente Lifecycle ---
 
