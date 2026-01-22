@@ -177,15 +177,16 @@ async def get_profit_loss(
 @router.get("/dashboard-stats")
 async def get_dashboard_stats(
     current_user: str = Depends(get_current_user),
-    db = Depends(get_database)
+    db = Depends(get_database),
+    days: int = Query(30, description="Number of days to look back")
 ):
     """Get key financial metrics for dashboard"""
     from dal.sales_repo import SalesRepository
     from dal.purchase_orders_repo import PurchaseOrdersRepository
     
-    # Last 30 days
+    # Configurable period (default 30 days, can be 365 for yearly)
     end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=30)
+    start_date = end_date - timedelta(days=days)
     
     # Previous 30 days for comparison
     prev_end = start_date

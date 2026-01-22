@@ -29,6 +29,7 @@ import {
   Trash2,
   Calendar,
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 interface Expense {
   id: string;
@@ -78,6 +79,7 @@ const EXPENSE_CATEGORIES = [
 const Finances: React.FC = () => {
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [yearlyStats, setYearlyStats] = useState<DashboardStats | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -93,14 +95,14 @@ const Finances: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchStats();
+    fetchYearlyStats();
     fetchExpenses();
   }, []);
 
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:8000/api/finances/dashboard-stats', {
+      const response = await fetch('http://localhost:8000/api/finances/dashboard-stats?days=30', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
@@ -109,6 +111,24 @@ const Finances: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching stats:', error);
+    }
+  };
+
+  const fetchYearlyStats = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      console.log('Fetching yearly stats...');
+      const response = await fetch('http://localhost:8000/api/finances/dashboard-stats?days=365', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log('Yearly stats response status:', response.status);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Yearly stats data:', data);
+        setYearlyStats(data);
+      }
+    } catch (error) {
+      console.error('Error fetching yearly stats:', error);
     }
   };
 
@@ -324,6 +344,90 @@ const Finances: React.FC = () => {
               </div>
             </Card>
           </div>
+        )}
+
+        {/* Yearly Financial Charts */}
+        {yearlyStats ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* Pie Chart - Revenue vs Expenses */}
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-4">Annual Financial Breakdown (Last 365 Days)</h2>
+              <div className="text-sm text-gray-600 mb-4">
+                Revenue: {formatCurrency(yearlyStats.revenue.current)} | 
+                Expenses: {formatCurrency(yearlyStats.expenses.current)} | 
+                Profit: {formatCurrency(yearlyStats.profit.current)}
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Revenue', value: yearlyStats.revenue.current, color: '#10b981' },
+                      { name: 'Expenses', value: yearlyStats.expenses.current, color: '#ef4444' },
+                      { name: 'Profit', value: yearlyStats.profit.current >= 0 ? yearlyStats.profit.current : 0, color: '#3b82f6' },
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {[
+                      { name: 'Revenue', value: yearlyStats.revenue.current, color: '#10b981' },
+                      { name: 'Expenses', value: yearlyStats.expenses.current, color: '#ef4444' },
+                      { name: 'Profit', value: yearlyStats.profit.current >= 0 ? yearlyStats.profit.current : 0, color: '#3b82f6' },
+                    ].map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Bar Chart - Expense Breakdown */}
+            <Card className="p-6">
+              <h2 className="text-xl font-bold mb-4">Expense Breakdown (Last 365 Days)</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={[
+                    { name: 'Operational', amount: yearlyStats.expenses.operational, color: '#f59e0b' },
+                    { name: 'Purchase Orders', amount: yearlyStats.expenses.purchase_orders, color: '#8b5cf6' },
+                  ]}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="amount" fill="#8884d8">
+                    {[
+                      { name: 'Operational', amount: yearlyStats.expenses.operational, color: '#f59e0b' },
+                      { name: 'Purchase Orders', amount: yearlyStats.expenses.purchase_orders, color: '#8b5cf6' },
+                    ].map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600">Operational Expenses:</p>
+                  <p className="font-bold text-orange-600">{formatCurrency(yearlyStats.expenses.operational)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Purchase Orders:</p>
+                  <p className="font-bold text-purple-600">{formatCurrency(yearlyStats.expenses.purchase_orders)}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        ) : (
+          <Card className="p-6 mb-6">
+            <p className="text-center text-gray-500">Loading yearly statistics...</p>
+          </Card>
         )}
 
         {/* Expenses List */}
