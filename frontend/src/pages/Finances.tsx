@@ -83,6 +83,7 @@ const Finances: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [yearlyLoading, setYearlyLoading] = useState(true);
 
   const [newExpense, setNewExpense] = useState({
     category: 'Utilities',
@@ -95,6 +96,7 @@ const Finances: React.FC = () => {
   });
 
   useEffect(() => {
+    fetchStats();
     fetchYearlyStats();
     fetchExpenses();
   }, []);
@@ -115,6 +117,7 @@ const Finances: React.FC = () => {
   };
 
   const fetchYearlyStats = async () => {
+    setYearlyLoading(true);
     try {
       const token = localStorage.getItem('access_token');
       console.log('Fetching yearly stats...');
@@ -129,6 +132,8 @@ const Finances: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching yearly stats:', error);
+    } finally {
+      setYearlyLoading(false);
     }
   };
 
@@ -347,7 +352,11 @@ const Finances: React.FC = () => {
         )}
 
         {/* Yearly Financial Charts */}
-        {yearlyStats ? (
+        {yearlyLoading ? (
+            <Card className="p-6 mb-6">
+              <p className="text-center text-gray-500">Loading yearly statistics...</p>
+            </Card>
+        ) : yearlyStats ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Pie Chart - Revenue vs Expenses */}
             <Card className="p-6">
