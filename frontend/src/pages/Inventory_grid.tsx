@@ -18,7 +18,8 @@ import {
     Activity,
     Download,
     Search,
-    Zap
+    Zap,
+    Info
 } from "lucide-react";
 import {
     Box,
@@ -27,7 +28,6 @@ import {
     FormControl
 } from '@mui/material';
 
-// Interfața rămâne la fel
 interface InventoryRow {
     id: string;
     sku: string;
@@ -39,6 +39,32 @@ interface InventoryRow {
     doc: number;
 }
 
+// --- NEW COMPONENT: INVENTORY LEGEND ---
+const InventoryLegend = () => (
+    <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-4 py-2 bg-white/40 backdrop-blur-sm rounded-xl border border-white/20 shadow-sm animate-fade-in">
+        <div className="flex items-center gap-2">
+            <div className="p-1 bg-blue-100 rounded text-blue-600">
+                <Info size={12} />
+            </div>
+            <span className="text-[10px] font-medium text-slate-500">
+                <strong className="text-slate-700 uppercase">Min. Safety:</strong> The critical reorder threshold. If stock falls below this, the status turns red.
+            </span>
+        </div>
+        <div className="flex items-center gap-2">
+            <Activity size={14} className="text-emerald-500" />
+            <span className="text-[10px] font-medium text-slate-500">
+                <strong className="text-slate-700 uppercase">7D Velocity:</strong> Sales speed; total units sold in the last 7 days.
+            </span>
+        </div>
+        <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-slate-400" />
+            <span className="text-[10px] font-medium text-slate-500">
+                <strong className="text-slate-700 uppercase">DOC (Days of Coverage):</strong> Stock autonomy; estimated days until current stock runs out.
+            </span>
+        </div>
+    </div>
+);
+
 const InventoryGridPage = () => {
     const { storeId } = useParams<{ storeId: string }>();
     const navigate = useNavigate();
@@ -46,8 +72,6 @@ const InventoryGridPage = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [category, setCategory] = useState('All');
     const [period, setPeriod] = useState(30);
-
-    // --- NOU: Stare pentru categoriile din baza de date ---
     const [dbCategories, setDbCategories] = useState<string[]>([]);
 
     const uniqueProductsCount = rows.length;
@@ -59,20 +83,19 @@ const InventoryGridPage = () => {
                     <Search size={14} className="text-slate-400 ml-2" />
                     <GridToolbarQuickFilter
                         variant="standard"
-                        placeholder="Căutare rapidă..."
+                        placeholder="Quick search..."
                         className="text-xs font-medium"
                     />
                 </Box>
                 <GridToolbarExport
                     startIcon={<Download size={14} />}
                     className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-3 py-1 rounded-lg"
-                    csvOptions={{ fileName: `Inventar_${storeId}` }}
+                    csvOptions={{ fileName: `Inventory_${storeId}` }}
                 />
             </GridToolbarContainer>
         );
     }
 
-    // --- NOU: Funcție pentru a încărca categoriile ---
     const fetchCategories = async () => {
         if (!storeId) return;
         try {
@@ -107,13 +130,9 @@ const InventoryGridPage = () => {
         }
     };
 
-    // Încărcăm categoriile o singură dată la mount sau când se schimbă magazinul
     useEffect(() => { fetchCategories(); }, [storeId]);
-
-    // Încărcăm datele grid-ului
     useEffect(() => { fetchInventoryData(); }, [storeId, category, period]);
 
-    // Coloanele rămân neschimbate
     const columns: GridColDef[] = [
         { field: 'sku', headerName: 'SKU', width: 130, renderCell: (params) => <span className="font-mono text-[10px] font-bold text-slate-500">{params.value}</span> },
         { field: 'name', headerName: 'Product Name', flex: 1.2, renderCell: (params) => <span className="font-semibold text-xs text-slate-700 truncate">{params.value}</span> },
@@ -158,6 +177,7 @@ const InventoryGridPage = () => {
     return (
         <DashboardLayout>
             <div className="flex flex-col h-[calc(100vh-20px)] w-full space-y-4 p-4 overflow-hidden animate-in fade-in duration-500">
+
                 <div className="flex items-center justify-between gap-4 shrink-0 mt-2">
                     <Card className="border-none shadow-sm bg-white/60 backdrop-blur-md min-w-[200px]">
                         <CardContent className="py-2 px-4 flex items-center gap-3">
@@ -189,11 +209,8 @@ const InventoryGridPage = () => {
                                         className="text-xs font-bold text-slate-600"
                                     >
                                         <MenuItem value="All">All Categories</MenuItem>
-                                        {/* --- NOU: Mapăm categoriile din baza de date --- */}
                                         {dbCategories.map((cat) => (
-                                            <MenuItem key={cat} value={cat}>
-                                                {cat}
-                                            </MenuItem>
+                                            <MenuItem key={cat} value={cat}>{cat}</MenuItem>
                                         ))}
                                     </Select>
                                 </FormControl>
@@ -212,6 +229,9 @@ const InventoryGridPage = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* --- LEGEND SECTION --- */}
+                <InventoryLegend />
 
                 <Card className="flex-1 shadow-2xl border-none bg-white/90 backdrop-blur-md rounded-2xl overflow-hidden min-h-0">
                     <CardContent className="p-0 h-full w-full">
@@ -240,7 +260,6 @@ const InventoryGridPage = () => {
                                 },
                                 '& .MuiDataGrid-cell': { borderBottom: '1px solid #f1f5f9' },
                                 '& .MuiDataGrid-virtualScroller': { overflowX: 'auto' },
-                                '& .MuiCheckbox-root': { transform: 'scale(0.7)' },
                             }}
                         />
                     </CardContent>

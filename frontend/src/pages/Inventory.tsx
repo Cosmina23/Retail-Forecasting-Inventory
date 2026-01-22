@@ -6,14 +6,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Package, TrendingUp, AlertTriangle, ShoppingCart, Loader2, PieChart as PieChartIcon } from "lucide-react";
+import {
+  Package,
+  TrendingUp,
+  AlertTriangle,
+  ShoppingCart,
+  Loader2,
+  PieChart as PieChartIcon,
+  Info,
+  HelpCircle
+} from "lucide-react";
 import { useParams } from "react-router-dom";
 import { apiService } from "@/services/api";
 import { toast } from "sonner";
-import { useToast } from "@/hooks/use-toast";
-import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { logActivity} from "@/services/activityLogger";
+import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { logActivity } from "@/services/activityLogger";
 
+// --- INTERFACES ---
 interface InventoryMetric {
   product: string;
   category: string;
@@ -41,6 +50,48 @@ interface OptimizationResponse {
   total_annual_revenue: number;
 }
 
+// --- LEGEND COMPONENT ---
+const OptimizationLegend = () => (
+  <div className="flex flex-wrap items-center gap-x-8 gap-y-3 px-6 py-3 bg-white/60 backdrop-blur-md rounded-2xl border border-slate-100 shadow-sm animate-fade-in shrink-0">
+    {/* ROP Section */}
+    <div className="flex items-center gap-3 border-r border-slate-100 pr-8">
+      <div className="p-1.5 bg-indigo-50 rounded-lg text-indigo-600">
+        <TrendingUp size={14} />
+      </div>
+      <div className="flex flex-col">
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ROP (Reorder Point)</span>
+        <span className="text-[10px] text-slate-500 leading-tight">
+          Stock level triggering a new order to prevent stockouts during lead time.
+        </span>
+      </div>
+    </div>
+
+    {/* ABC Section */}
+    <div className="flex items-center gap-6">
+      <div className="flex items-center gap-2">
+        <HelpCircle size={14} className="text-slate-400" />
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ABC Analysis:</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Badge className="bg-emerald-500 text-white border-none text-[8px] h-4 font-black">A</Badge>
+        <span className="text-[10px] font-medium text-slate-500 italic">High Value (70% Rev.)</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Badge className="bg-blue-500 text-white border-none text-[8px] h-4 font-black">B</Badge>
+        <span className="text-[10px] font-medium text-slate-500 italic">Medium Value (20% Rev.)</span>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Badge className="bg-slate-400 text-white border-none text-[8px] h-4 font-black">C</Badge>
+        <span className="text-[10px] font-medium text-slate-500 italic">Low Value (10% Rev.)</span>
+      </div>
+    </div>
+  </div>
+);
+
+// --- MAIN COMPONENT ---
 const Inventory = () => {
   const { t } = useTranslation();
   const { storeId } = useParams<{ storeId: string }>();
@@ -49,7 +100,6 @@ const Inventory = () => {
   const [serviceLevel, setServiceLevel] = useState<number>(0.95);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<OptimizationResponse | null>(null);
-  const[inventory,setInventory]=useState<any[]>();
 
   const handleOptimize = useCallback(async (lTime: number, sLevel: number) => {
     if (!storeId) return;
@@ -58,7 +108,6 @@ const Inventory = () => {
       const response = await apiService.getInventoryOptimization(storeId, lTime, sLevel);
       setData(response);
 
-      // Log the activity
       await logActivity(
         storeId,
         "inventory_optimized",
@@ -101,7 +150,7 @@ const Inventory = () => {
     const raw = data?.metrics ?? [];
     const map = new Map<string, any>();
     raw.forEach(m => {
-      const key = (m.product || m.sku|| "").toString();
+      const key = (m.product || "").toString();
       if (!map.has(key)) map.set(key, m);
     });
     return Array.from(map.values());
@@ -192,6 +241,9 @@ const Inventory = () => {
           </CardContent>
         </Card>
 
+        {/* Legend Section */}
+        {data && <OptimizationLegend />}
+
         {data ? (
           <>
             {/* KPI Cards */}
@@ -219,7 +271,7 @@ const Inventory = () => {
             {/* Content Area */}
             <div className="flex-1 min-h-0 grid lg:grid-cols-3 gap-4 overflow-hidden">
 
-              {/* ABC CLASSIFICATION - DESIGN NOU (Donut Chart) */}
+              {/* Donut Chart Card */}
               <Card className="lg:col-span-1 h-full border-none shadow-sm flex flex-col bg-white overflow-hidden">
                 <CardHeader className="py-4 px-6 border-b border-slate-50 shrink-0">
                   <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-700">
@@ -227,7 +279,6 @@ const Inventory = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col p-6 overflow-hidden">
-                  {/* Containerul graficului cu text central */}
                   <div className="relative flex-1 min-h-[220px]">
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('inventory.totalSKU')}</span>
@@ -260,7 +311,6 @@ const Inventory = () => {
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Legenda rafinată */}
                   <div className="grid grid-cols-1 gap-3 mt-6">
                     {abcChartData.map((item) => (
                       <div key={item.name} className="flex items-center justify-between group">
@@ -276,7 +326,6 @@ const Inventory = () => {
                     ))}
                   </div>
 
-                  {/* Info Box */}
                   <div className="mt-auto pt-4 border-t border-slate-100 italic">
                     <p className="text-[10px] text-slate-400 leading-relaxed text-center">
                       {t('inventory.analysisBasedOnRevenue')}
@@ -285,7 +334,7 @@ const Inventory = () => {
                 </CardContent>
               </Card>
 
-              {/* Optimization Results Table */}
+              {/* Optimization Table Card */}
               <Card className="lg:col-span-2 h-full border-none shadow-sm flex flex-col bg-white overflow-hidden">
                 <CardHeader className="py-4 px-6 border-b border-slate-50 shrink-0">
                   <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">{t('inventory.optimizationRecommendations')}</CardTitle>

@@ -115,6 +115,7 @@ const PurchaseOrders = () => {
   const [allOrders, setAllOrders] = useState<SavedPurchaseOrder[]>([]);
 const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 const [loadingHistory, setLoadingHistory] = useState(false);
+const [selectedOrderForExport, setSelectedOrderForExport] = useState<SavedPurchaseOrder | null>(null);
   
   // Order Items Dialog states
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
@@ -172,7 +173,7 @@ useEffect(() => {
       product_name: item.product_name,
       category: item.category || "Electronics",
       // Calculăm o cantitate sugerată (ex: dublul pragului critic sau o valoare fixă)
-      quantity:item.reorder_point - item.quantity,
+      quantity:item.reorder_point - item.quantity + 100,
       unit_price: item.unit_price || 0, // Utilizatorul va introduce prețul sau se va lua din DB ulterior
       description: `Critical Restoration - Current Stock: ${item.quantity}`
     }));
@@ -396,7 +397,7 @@ const handleConfirmDelivery = async () => {
     setLoading(true);
     try {
       const orderData = {
-        store_id: selectedStore,  // Keep as string for MongoDB ObjectId
+        store_id: selectedStore,
         supplier: selectedSupplier,
         items: items.map(({ id, ...item }) => item),
         delivery_date: deliveryDate || undefined,
@@ -404,9 +405,25 @@ const handleConfirmDelivery = async () => {
       };
 
       const po = await apiService.generatePurchaseOrder(orderData);
-      setGeneratedPO(po);
 
-      // Log the activity
+      // --- LOGICA DE REFRESH ȘI CURĂȚARE ---
+
+      // 1. Resetăm lista de articole (asta va curăța "Total Items" și "Est. Subtotal" din cardul de Summary)
+      setItems([]);
+
+      // 2. Resetăm PO-ul generat (asta va ascunde detaliile de Shipping, VAT și PO Number)
+      setGeneratedPO(null);
+
+      // 3. Resetăm restul câmpurilor din formular
+      setNotes("");
+      setDeliveryDate("");
+
+      // 4. Reîncărcăm lista de comenzi active pentru a apărea noul PO în cardul de jos
+      if (selectedStore) {
+        await loadPendingOrders(selectedStore);
+      }
+
+      // Log activity
       await logActivity(
         selectedStore,
         "purchase-order_created",
@@ -419,7 +436,7 @@ const handleConfirmDelivery = async () => {
         }
       );
 
-      toast.success("Purchase order generated successfully!");
+      toast.success(`Purchase order ${po.po_number} generated and added to Active Orders!`);
     } catch (error: any) {
       console.error("Failed to generate PO:", error);
       toast.error(error.message || "Failed to generate purchase order");
@@ -443,7 +460,7 @@ const handleConfirmDelivery = async () => {
         forecastDays
       );
       setGeneratedPO(po);
-      
+
       // Update items list to show what was ordered
       const autoItems = po.items.map((item: any, idx: number) => ({
         id: `auto-${idx}`,
@@ -469,7 +486,7 @@ const handleConfirmDelivery = async () => {
           generated_from: "forecast",
         }
       );
-      
+
       toast.success("Purchase order generated from AI forecast!");
     } catch (error: any) {
       console.error("Failed to auto-generate PO:", error);
@@ -480,98 +497,39 @@ const handleConfirmDelivery = async () => {
   };
 
   const downloadPO = () => {
-    if (!generatedPO) return;
+    if (!order) return;
     setExportDialogOpen(true);
   };
 
-  const exportToExcel = () => {
-    if (!generatedPO) return;
-
-    // Prepare data for Excel
-    const worksheetData = [
-      ['PURCHASE ORDER'],
-      ['PO Number:', generatedPO.po_number],
-      ['Order Date:', generatedPO.order_date],
-      ['Delivery Date:', generatedPO.delivery_date],
-      [],
-      ['SUPPLIER INFORMATION'],
-      ['Name:', generatedPO.supplier_info?.name || ''],
-      ['Payment Terms:', generatedPO.payment_terms],
-      [],
-      ['STORE INFORMATION'],
-      ['Name:', generatedPO.store_info?.name || ''],
-      [],
-      ['ORDER ITEMS'],
-      ['Product', 'Quantity', 'Unit Price (€)', 'Total (€)'],
-    ];
-
-    // Add items
-    generatedPO.items.forEach((item: any) => {
-      worksheetData.push([
-        item.product_name,
-        item.quantity,
-        item.unit_price,
-        item.quantity * item.unit_price
-      ]);
-    });
-
-    // Add totals
-    worksheetData.push(
-      [],
-      ['', '', 'Subtotal:', generatedPO.subtotal],
-      ['', '', 'Shipping:', generatedPO.shipping_cost],
-      ['', '', 'VAT (19%):', generatedPO.vat_amount],
-      ['', '', 'TOTAL:', generatedPO.total_cost]
-    );
-
-    // Create workbook and worksheet
-    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Purchase Order');
-
-    // Style the header
-    ws['!cols'] = [
-      { wch: 30 },
-      { wch: 12 },
-      { wch: 15 },
-      { wch: 15 }
-    ];
-
-    // Download
-    XLSX.writeFile(wb, `${generatedPO.po_number}.xlsx`);
-    toast.success("Excel file downloaded");
-    setExportDialogOpen(false);
-  };
-
-  const exportToPDF = () => {
-    if (!generatedPO) return;
+  const exportToPDF = (order: PurchaseOrder) => {
+    if (!order) return;
 
     const doc = new jsPDF();
-    
+
     // Header
     doc.setFontSize(20);
     doc.text('PURCHASE ORDER', 105, 20, { align: 'center' });
-    
+
     doc.setFontSize(10);
-    doc.text(`PO Number: ${generatedPO.po_number}`, 20, 35);
-    doc.text(`Order Date: ${generatedPO.order_date}`, 20, 42);
-    doc.text(`Delivery Date: ${generatedPO.delivery_date}`, 20, 49);
+    doc.text(`PO Number: ${order.po_number}`, 20, 35);
+    doc.text(`Order Date: ${order.order_date}`, 20, 42);
+    doc.text(`Delivery Date: ${order.delivery_date}`, 20, 49);
 
     // Supplier Info
     doc.setFontSize(12);
     doc.text('SUPPLIER INFORMATION', 20, 62);
     doc.setFontSize(10);
-    doc.text(`Name: ${generatedPO.supplier_info?.name || ''}`, 20, 69);
-    doc.text(`Payment Terms: ${generatedPO.payment_terms}`, 20, 76);
+    doc.text(`Name: ${order.supplier_info?.name || ''}`, 20, 69);
+    doc.text(`Payment Terms: ${order.payment_terms}`, 20, 76);
 
     // Store Info
     doc.setFontSize(12);
     doc.text('STORE INFORMATION', 120, 62);
     doc.setFontSize(10);
-    doc.text(`Name: ${generatedPO.store_info?.name || ''}`, 120, 69);
+    doc.text(`Name: ${order.store_info?.name || ''}`, 120, 69);
 
     // Items table
-    const tableData = generatedPO.items.map((item: any) => [
+    const tableData = order.items.map((item: any) => [
       item.product_name,
       item.quantity.toString(),
       `€${item.unit_price.toFixed(2)}`,
@@ -590,47 +548,102 @@ const handleConfirmDelivery = async () => {
     // Totals - get final Y position from autoTable
     const finalY = (doc as any).lastAutoTable.finalY + 10;
     doc.setFontSize(10);
-    doc.text(`Subtotal: €${generatedPO.subtotal.toFixed(2)}`, 140, finalY);
-    doc.text(`Shipping: €${generatedPO.shipping_cost.toFixed(2)}`, 140, finalY + 7);
-    doc.text(`VAT (19%): €${generatedPO.vat_amount.toFixed(2)}`, 140, finalY + 14);
+    doc.text(`Subtotal: €${order.subtotal.toFixed(2)}`, 140, finalY);
+    doc.text(`Shipping: €${order.shipping_cost.toFixed(2)}`, 140, finalY + 7);
+    doc.text(`VAT (19%): €${order.vat_amount.toFixed(2)}`, 140, finalY + 14);
     doc.setFontSize(12);
-    doc.text(`TOTAL: €${generatedPO.total_cost.toFixed(2)}`, 140, finalY + 24);
+    doc.text(`TOTAL: €${order.total_cost.toFixed(2)}`, 140, finalY + 24);
 
     // Download
-    doc.save(`${generatedPO.po_number}.pdf`);
+    doc.save(`${order.po_number}.pdf`);
     toast.success("PDF file downloaded");
     setExportDialogOpen(false);
   };
 
-  const exportToText = () => {
-    if (!generatedPO) return;
+  // 1. Modifică exportToExcel să accepte parametrul 'order'
+const exportToExcel = (orderToDownload: any) => {
+  if (!orderToDownload) return;
 
-    const blob = new Blob([generatedPO.formatted_text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${generatedPO.po_number}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Text file downloaded");
-    setExportDialogOpen(false);
-  };
+  const worksheetData = [
+    ['PURCHASE ORDER'],
+    ['PO Number:', orderToDownload.po_number],
+    ['Order Date:', orderToDownload.order_date],
+    ['Delivery Date:', orderToDownload.delivery_date],
+    [],
+    ['SUPPLIER INFORMATION'],
+    ['Name:', orderToDownload.supplier_info?.name || ''],
+    ['Payment Terms:', orderToDownload.payment_terms],
+    [],
+    ['STORE INFORMATION'],
+    ['Name:', orderToDownload.store_info?.name || ''],
+    [],
+    ['ORDER ITEMS'],
+    ['Product', 'Quantity', 'Unit Price (€)', 'Total (€)'],
+  ];
+
+  orderToDownload.items.forEach((item: any) => {
+    worksheetData.push([
+      item.product_name,
+      item.quantity,
+      item.unit_price,
+      item.quantity * item.unit_price
+    ]);
+  });
+
+  worksheetData.push(
+    [],
+    ['', '', 'Subtotal:', orderToDownload.subtotal],
+    ['', '', 'Shipping:', orderToDownload.shipping_cost],
+    ['', '', 'VAT (19%):', orderToDownload.vat_amount],
+    ['', '', 'TOTAL:', orderToDownload.total_cost]
+  );
+
+  const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Purchase Order');
+
+  ws['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
+
+  XLSX.writeFile(wb, `${orderToDownload.po_number}.xlsx`);
+  toast.success("Excel file downloaded");
+  setExportDialogOpen(false);
+};
+
+// 2. Modifică exportToText să accepte parametrul 'order'
+const exportToText = (orderToDownload: any) => {
+  if (!orderToDownload) return;
+
+  const blob = new Blob([orderToDownload.formatted_text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${orderToDownload.po_number}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast.success("Text file downloaded");
+  setExportDialogOpen(false);
+};
 
   const handleExport = () => {
-    switch (selectedFormat) {
-      case 'excel':
-        exportToExcel();
-        break;
-      case 'pdf':
-        exportToPDF();
-        break;
-      case 'txt':
-        exportToText();
-        break;
-    }
-  };
+  const orderToExport = selectedOrderForExport || order;
+  if (!orderToExport) return;
+
+  switch (selectedFormat) {
+    case 'excel':
+      exportToExcel(orderToExport); // Pasăm obiectul comenzii
+      break;
+    case 'pdf':
+      exportToPDF(orderToExport);
+      break;
+    case 'txt':
+      exportToText(orderToExport);
+      break;
+  }
+  // Resetăm selecția din istoric după export
+  setSelectedOrderForExport(null);
+};
 
   const resetForm = () => {
     setItems([]);
@@ -1341,52 +1354,61 @@ const handleConfirmDelivery = async () => {
   </DialogContent>
 </Dialog>
 
-<Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+<Dialog open={historyDialogOpen} onOpenChange={(open) => {
+    setHistoryDialogOpen(open);
+    if (!open) setSelectedOrderForExport(null); // Resetăm la închidere
+}}>
   <DialogContent className="sm:max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-    <DialogHeader>
-      <DialogTitle>Complete Order History</DialogTitle>
-      <DialogDescription>View all pending and finalized purchase orders.</DialogDescription>
-    </DialogHeader>
-
+    {/* ... Header ... */}
     <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-      {loadingHistory ? (
-        <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>
-      ) : allOrders.length === 0 ? (
-        <p className="text-center py-8 text-muted-foreground italic">No orders found.</p>
-      ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b">
-              <tr>
-                <th className="p-3 text-left">PO Number</th>
-                <th className="p-3 text-left">Supplier</th>
-                <th className="p-3 text-left">Total Cost</th>
-                <th className="p-3 text-left">Status</th>
-                <th className="p-3 text-left">Delivery Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {allOrders.map((order) => (
-                <tr key={order.po_number} className="hover:bg-slate-50/50">
-                  <td className="p-3 font-mono font-medium">{order.po_number}</td>
-                  <td className="p-3">{order.supplier_info.name}</td>
-                  <td className="p-3 font-semibold">€{order.total_cost.toFixed(2)}</td>
-                  <td className="p-3">
+      {/* ... Loader ... */}
+      <div className="border rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b">
+            <tr>
+              <th className="p-3 text-left">PO Number</th>
+              <th className="p-3 text-left">Supplier</th>
+              <th className="p-3 text-left">Total Cost</th>
+              <th className="p-3 text-left">Status</th>
+              <th className="p-3 text-left">Delivery Date</th>
+              <th className="p-3 text-center">Actions</th> {/* Coloană nouă */}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {allOrders.map((order) => (
+              <tr key={order.po_number} className="hover:bg-slate-50/50">
+                <td className="p-3 font-mono font-medium">{order.po_number}</td>
+                <td className="p-3">{order.supplier_info.name}</td>
+                <td className="p-3 font-semibold">€{order.total_cost.toFixed(2)}</td>
+                <td className="p-3">
                     <Badge className={
                       order.status === 'received'
-                      ? "bg-green-100 text-green-800 hover:bg-green-100"
-                      : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-yellow-100 text-yellow-800"
                     }>
                       {order.status.toUpperCase()}
                     </Badge>
-                  </td>
-                  <td className="p-3 text-muted-foreground">{order.delivery_date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                </td>
+                <td className="p-3 text-muted-foreground">{order.delivery_date}</td>
+                <td className="p-3 text-center">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                    onClick={() => {
+                      setSelectedOrderForExport(order); // Setăm comanda curentă pentru export
+                      setExportDialogOpen(true); // Deschidem modalul de alegere format
+                    }}
+                    title="Download Invoice"
+                  >
+                    <Download className="w-4 h-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   </DialogContent>
 </Dialog>

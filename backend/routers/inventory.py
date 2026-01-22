@@ -139,31 +139,34 @@ async def optimize_inventory(
         unit_costs_default = {"Electronics": 100, "Clothing": 30, "Food": 5}
 
         for item in inventory_items:
+            # 1. Extragere ID și date Produs
             prod_id = item.get("product_id")
-            product = get_product_by_id(prod_id) if prod_id else None
+            if not prod_id:
+                continue
+
+            product = get_product_by_id(prod_id)
             if not product:
-                # try to fetch directly from collection if sanitization removed expected fields
                 try:
-                    raw = products_collection.find_one({"_id": ObjectId(prod_id)}) if prod_id and ObjectId.is_valid(prod_id) else None
-                    product = raw or {}
+                    # Căutare directă dacă repo-ul eșuează
+                    p_id_obj = ObjectId(prod_id) if ObjectId.is_valid(prod_id) else prod_id
+                    product = products_collection.find_one({"_id": p_id_obj}) or {}
                 except Exception:
                     product = {}
 
-            category = product.get("category") or product.get("cat") or "Uncategorized"
-            current_stock = int(item.get("stock_quantity") or item.get("quantity") or 0)
+            # --- REZOLVARE STOC ---
+            # Verificăm toate variantele posibile de denumire din DB
+            current_stock = int(item.get("quantity") or item.get("stock_quantity") or item.get("current_stock") or 0)
 
-            # Use canonical product name and cost fields from products collection
-            product_name = product.get("name") or product.get("product_name")
-            unit_cost = product.get("cost") or product.get("price") or product.get("unit_price") or 10.0
+            # Date de bază produs
+            product_name = product.get("name") or product.get("product_name") or "Unknown"
+            category = product.get("category") or "Uncategorized"
+            unit_cost = float(product.get("price") or product.get("cost") or product.get("unit_price") or 10.0)
 
-            if not product_name:
-                # If no name, skip this item (cannot link sales)
-                continue
+            # 2. Calcul Cerere din Vânzări
+            avg_daily_demand, demand_std, annual_demand = 0.0, 0.1, 0.0
 
-            # 2. Fetch sales by product_id and store_id (sales store product_id, not product name)
-            avg_daily_demand, demand_std, annual_demand = 0.0, 0.0, 0.0
-
-            sales_query = {"product_id": prod_id, "store_id": str(store_id)} if prod_id else {"store_id": str(store_id)}
+            # Asigurăm consistența ID-ului pentru query
+            sales_query = {"product_id": str(prod_id), "store_id": str(store_id)}
             sales = list(sales_collection.find(sales_query))
 
             if sales:
@@ -173,28 +176,32 @@ async def optimize_inventory(
                 } for s in sales])
 
                 df["date"] = pd.to_datetime(df["date"])
-
-                if not df.empty:
-                    # Calculăm perioada reală din datele de vânzări
-                    total_days = (df["date"].max() - df["date"].min()).days + 1
-                    avg_daily_demand = df["quantity"].sum() / max(1, total_days)
+                if not df.empty and len(df) > 1:
+                    total_days = max(1, (df["date"].max() - df["date"].min()).days + 1)
+                    avg_daily_demand = df["quantity"].sum() / total_days
                     demand_std = df["quantity"].std()
 
+                    # Fallback pentru deviație dacă avem puține date
                     if pd.isna(demand_std) or demand_std < 0.1:
                         demand_std = max(0.1, avg_daily_demand * 0.2)
 
                     annual_demand = avg_daily_demand * 365
+                else:
+                    # Fallback dacă avem o singură vânzare sau date puține
+                    avg_daily_demand = sum(s.get("quantity", 0) for s in sales) / 7
+                    annual_demand = avg_daily_demand * 365
 
-            # 3. Calcule optimizare
+            # 3. Calcule optimizare (Folosind funcțiile tale din DAL)
             safety_stock = calculate_safety_stock(avg_daily_demand, demand_std, lead_time_days, service_level)
             reorder_point = calculate_reorder_point(avg_daily_demand, lead_time_days, safety_stock)
 
-            # EOQ (Order Quantity)
+            # EOQ (Economic Order Quantity)
             try:
-                eoq = calculate_eoq(annual_demand, unit_cost=float(unit_cost) if unit_cost is not None else 10.0)
+                eoq = calculate_eoq(annual_demand, unit_cost=unit_cost)
             except Exception:
-                eoq = 0
+                eoq = 10  # Valoare de siguranță
 
+            # 4. Construire obiect final pentru Frontend (MAPPING EXACT)
             metrics_list.append({
                 "product": product_name,
                 "category": category,
@@ -202,12 +209,12 @@ async def optimize_inventory(
                 "avg_daily_demand": round(avg_daily_demand, 2),
                 "demand_std": round(demand_std, 2),
                 "reorder_point": int(reorder_point),
-                "safety_stock": int(ss) if 'ss' in locals() else int(safety_stock),
+                "safety_stock": int(safety_stock),  # Am șters referința la 'ss' care nu exista
                 "recommended_order_qty": int(eoq) if current_stock <= reorder_point else 0,
-                "annual_revenue": round(annual_demand * (float(unit_cost) * 1.5), 2) if unit_cost else 0.0,
+                "annual_revenue": round(annual_demand * (unit_cost * 1.5), 2),
                 "stock_days": round(current_stock / avg_daily_demand if avg_daily_demand > 0 else 999, 1),
-                "abc_classification": "C",  # Placeholder
-                "status": ""  # Placeholder
+                "abc_classification": "C",  # Va fi calculat ulterior de perform_abc_analysis
+                "status": ""  # Va fi calculat ulterior de get_stock_status
             })
 
         if not metrics_list:
