@@ -20,6 +20,7 @@ import Settings from "./pages/Settings";
 import Chat from "./pages/Chat";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import StorePlanogram from "./pages/StorePlanogram";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/history/:storeId" element={<History />} />
             <Route path="/sales/:storeId" element={<Sales />} />
             <Route path="/chat/:storeId" element={<Chat />} />
+            <Route path="/planogram/:storeId" element={<StorePlanogram />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

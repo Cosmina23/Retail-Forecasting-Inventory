@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Package, TrendingUp, History, ChevronLeft, Settings, Bell, FileText, MessageCircle } from "lucide-react";
+import { LayoutDashboard, Package, TrendingUp, History, ChevronLeft, Settings, Bell, FileText, MessageCircle, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ interface DashboardLayoutProps {
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Package, label: "Inventory", path: "/inventory_grid" },
+  { icon: Store, label: "Store Planogram", path: "/planogram" },
   { icon: TrendingUp, label: "Forecasting", path: "/forecasting" },
   { icon: FileText, label: "Purchase Orders", path: "/purchase-orders" },
   { icon: History, label: "History", path: "/history" },
