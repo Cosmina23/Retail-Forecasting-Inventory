@@ -5,6 +5,7 @@ from bson.errors import InvalidId
 from typing import List, Optional
 from datetime import datetime, timedelta
 from utils.auth import get_current_user
+from dal.stores_repo import get_store_by_id
 
 router = APIRouter()  # Remove prefix from here
 
@@ -23,11 +24,11 @@ def verify_store_ownership(store_id: str, current_user: Optional[dict]) -> tuple
 
     try:
         # Try to find store by _id (ObjectId)
-        object_id = ObjectId(store_id)
-        store = stores_collection.find_one({"_id": object_id})
+       # object_id = ObjectId(store_id)
+        store = get_store_by_id(store_id)
     except (InvalidId, Exception):
         # If not valid ObjectId, try store_id field
-        store = stores_collection.find_one({"store_id": store_id})
+        store =get_store_by_id(store_id)
 
     if not store:
         return False, None

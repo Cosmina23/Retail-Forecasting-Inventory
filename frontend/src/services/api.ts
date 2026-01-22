@@ -75,12 +75,13 @@ class ApiService {
 
     return await response.json();
   }
-  async getSales(skip = 0, limit = 100, days?: number) {
+  async getSales(storeId: string,skip = 0, limit = 100, days?: number) {
+      if (!storeId) throw new Error('storeId required');
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
     if (days !== undefined) {
       params.append('days', String(days));
     }
-    return this.request(`/api/sales/?${params.toString()}`);
+    return this.request(`/api/sales/${storeId}?${params.toString()}`);
   }
 
   async getSalesSummary(days = 30) {

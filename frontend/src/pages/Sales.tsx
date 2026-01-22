@@ -7,11 +7,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Package } from "lucide-react";
+import { Package, Search, X } from "lucide-react";
 import apiService from "@/services/api";
 import {logActivity} from "@/services/activityLogger.ts";
+import { useParams } from "react-router-dom";
 
 const Sales = () => {
+  const params = useParams();
+  const routeStoreId = params.storeId
   const { toast } = useToast();
   const [sales, setSales] = useState<any[]>([]);
   const [totalSales, setTotalSales] = useState<number>(0);
@@ -29,12 +32,18 @@ const Sales = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [selectedStore, setSelectedStore] = useState<string>("");
+    const [searchQuery, setSearchQuery] = useState<string>("");
+    const [storeName, setStoreName] = useState<string>("");
 
   // Fetch product and store names for visible sales
   useEffect(() => {
     const fetchNames = async () => {
       const prodIds = Array.from(new Set(sales.map(s => s.product_id).filter(Boolean)));
+      const storeIds = Array.from(new Set(sales.map(s => s.store_id).filter(Boolean)));
+ setSearchQuery(""); 
       const prodMap: {[id: string]: string} = {...productNames};
+      const storeMap: {[id: string]: string} = {...storeNames};
 
       for (const pid of prodIds) {
         if (!prodMap[pid]) {
@@ -47,7 +56,19 @@ const Sales = () => {
         }
       }
 
+      for (const sid of storeIds) {
+        if (!storeMap[sid]) {
+          try {
+            const store = await apiService.getStore(sid);
+            storeMap[sid] = store?.name ?? sid;
+          } catch (error) {
+            storeMap[sid] = sid;
+          }
+        }
+      }
+
       setProductNames(prodMap);
+      setStoreNames(storeMap);
     };
     if (sales.length) fetchNames();
     // eslint-disable-next-line
@@ -57,16 +78,14 @@ const Sales = () => {
     if (!uploadFile) return;
     setUploading(true);
     try {
-      const storeData = localStorage.getItem("selectedStore");
-      const store = storeData ? JSON.parse(storeData) : null;
-      const result = await apiService.importSales(uploadFile, store?.id);
+      const result = await apiService.importSales(uploadFile, routeStoreId);
       const imported = result.inserted_or_updated ?? result.inserted_count ?? 0;
       const errorCount = Array.isArray(result.errors) ? result.errors.length : 0;
       toast({ title: "Success!", description: `Imported ${imported} sales successfully${errorCount ? `, ${errorCount} rows had issues` : ""}` });
       // refresh
-
+      const store=await apiService.getStore(routeStoreId)
       // Log the activity
-      if (store) {
+      if (routeStoreId) {
         await logActivity(
           store,
           "data_imported",
@@ -87,17 +106,29 @@ const Sales = () => {
       setUploading(false);
     }
   };
-
+ const getProductDisplayName = (product: string): string => {
+    // First check if we have a mapping for this product ID
+    if (productNames[product]) {
+      return productNames[product];
+    }
+    // If product is a valid product name (contains alphanumeric and spaces), return it as is
+    if (product && product.length < 25 && /^[a-zA-Z0-9\s\-]+$/.test(product)) {
+      return product;
+    }
+    // For IDs, return a truncated version
+    return product?.substring(0, 8) + (product?.length > 8 ? '...' : '') || 'Unknown Product';
+  };
   useEffect(() => {
     fetchSales(1);
     // eslint-disable-next-line
   }, [days]);
-
+  // NOTE: `filteredProducts` removed — search uses `filteredSales` below which matches product name/id.
   const fetchSales = async (pageNumber: number = page) => {
     setLoading(true);
-    try {
+    try{
+      console.log('storeId ',routeStoreId)
       const skip = (pageNumber - 1) * pageSize;
-      const data = await apiService.getSales(skip, pageSize, days ?? undefined);
+      const data = await apiService.getSales(routeStoreId,skip, pageSize, days ?? undefined);
       const items = Array.isArray(data) ? data : data?.items ?? [];
       const total = data?.total ?? (Array.isArray(data) ? items.length : 0);
       setSales(items);
@@ -111,19 +142,21 @@ const Sales = () => {
   };
 
   const filteredSales = useMemo(() => {
-    const term = search.toLowerCase();
+    const term = searchQuery.toLowerCase();
     const from = appliedFrom ? new Date(appliedFrom) : undefined;
     const to = appliedTo ? new Date(appliedTo) : undefined;
     if (to) to.setHours(23, 59, 59, 999);
 
     return sales.filter((sale) => {
-      const matchesSearch = !term || (sale.product_name?.toLowerCase().includes(term));
+      // Match search term against resolved product name, fallback to product_id
+      const productDisplay = (productNames[sale.product_id] || sale.product_name || sale.product || sale.product_id || "").toString().toLowerCase();
+      const matchesSearch = !term || productDisplay.includes(term);
       const dateVal = sale.sale_date || sale.date;
       const saleDt = dateVal ? new Date(dateVal) : undefined;
       const matchesDate = (!from || (saleDt && saleDt >= from)) && (!to || (saleDt && saleDt <= to));
       return matchesSearch&& matchesDate;
     });
-  }, [sales, search, appliedFrom, appliedTo]);
+  }, [sales, searchQuery, appliedFrom, appliedTo, productNames]);
 
   return (
     <DashboardLayout>
@@ -163,8 +196,24 @@ const Sales = () => {
                   </select>
                 </label>
               </div>
-
-              <Input placeholder="Search by product" value={search} onChange={(e) => setSearch(e.target.value)} className="w-64" />
+ <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 pr-9"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -206,7 +255,7 @@ const Sales = () => {
                         <TableRow key={sale.id || sale._id || idx}>
                           <TableCell>{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : "-"}</TableCell>
                           <TableCell><Badge variant="secondary">{ productNames[sale.product_id] || sale.product_id }</Badge></TableCell>
-                          <TableCell>{storeNames[sale.store_id] || sale.store_name || sale.store_id || "-"}</TableCell>
+                          <TableCell>{storeNames[sale.store_id] || sale.store_id || "-"}</TableCell>
                           <TableCell>{sale.quantity ?? "-"}</TableCell>
                           <TableCell>{ sale.total_amount !== undefined && sale.total_amount !== null ? `$${Number(sale.total_amount).toFixed(2)}` : sale.total !== undefined && sale.total !== null ? `$${Number(sale.total).toFixed(2)}` : "-" }</TableCell>
                         </TableRow>

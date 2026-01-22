@@ -113,9 +113,9 @@ def _normalize_import_doc(doc: dict) -> dict:
     return result
 
 
-@router.get("/", response_model=dict)
+@router.get("/{store_id}", response_model=dict)
 async def get_sales(
-        store_id: Optional[str] = Query(None),
+        store_id:str,
         skip: int = 0,
         limit: int = 100,
         days: Optional[int] = None,
@@ -131,7 +131,7 @@ async def get_sales(
             raise HTTPException(status_code=403, detail="Access denied to this store's data")
 
         # Count total and return paginated items for this store
-        query = {"store_id": actual_id}
+        query = {"store_id": store_id}
         if days is not None:
             cutoff_date = datetime.utcnow() - timedelta(days=days)
             query["sale_date"] = {"$gte": cutoff_date}

@@ -87,4 +87,5 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     if user_id is None:
         print("User ID is None after decode!")
         raise credentials_exception
-    return user_id
+    # Return a dict resembling the user object with `_id` key
+    return {"_id": user_id}

@@ -178,7 +178,7 @@ const Forecasting = () => {
     
     // Load historical sales data for this product
     try {
-      const salesResponse = await apiService.getSales(0, 1000, 30); // Last 30 days
+      const salesResponse = await apiService.getSales(selectedStore,0, 1000, 30); // Last 30 days
       
       if (salesResponse?.sales) {
         // Filter sales for this specific product
