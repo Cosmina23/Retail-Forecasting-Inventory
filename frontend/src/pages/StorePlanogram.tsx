@@ -247,8 +247,8 @@ const StorePlanogram: React.FC = () => {
         console.log('✅ Backend save OK:', result.text_file);
         const itemName = storeItems.find(i => i.id === selectedItemId)?.name || 'Element';
         toast({
-          title: '✅ Salvat!',
-          description: `Produsele pentru ${itemName} au fost salvate`,
+          title: '✅ Saved!',
+          description: `Products for ${itemName} have been saved`,
         });
       } else {
         console.error('❌ Backend error:', result);
@@ -263,8 +263,8 @@ const StorePlanogram: React.FC = () => {
       console.error('❌ Save failed:', error);
       setIsSaving(false);
       toast({
-        title: 'Eroare',
-        description: 'Nu s-a putut salva',
+        title: 'Error',
+        description: 'Could not save',
         variant: 'destructive',
       });
     }
@@ -466,8 +466,8 @@ const StorePlanogram: React.FC = () => {
           // Item header
           pdf.setFontSize(16);
           pdf.setFont('helvetica', 'bold');
-          const icon = item.type === 'fridge' ? '❄️' : '📦';
-          pdf.text(`${icon} ${item.name}`, 20, yPosition);
+          const itemLabel = item.type === 'fridge' ? 'FRIDGE' : 'SHELF';
+          pdf.text(`${itemLabel}: ${item.name}`, 20, yPosition);
 
           yPosition += 2;
 
@@ -475,7 +475,7 @@ const StorePlanogram: React.FC = () => {
           pdf.setFontSize(9);
           pdf.setFont('helvetica', 'normal');
           pdf.setTextColor(100);
-          pdf.text(`Position: X=${Math.round(item.x)}, Y=${Math.round(item.y)} | Rotation: ${item.rotation}°`, 20, yPosition);
+          pdf.text(`Position: X=${Math.round(item.x)}, Y=${Math.round(item.y)} | Rotation: ${item.rotation} degrees`, 20, yPosition);
           pdf.setTextColor(0);
 
           yPosition += 6;
@@ -666,36 +666,36 @@ const StorePlanogram: React.FC = () => {
     <div className="container mx-auto p-6">
       <div className="mb-6">
         <h1 className="text-4xl font-bold text-gray-800 mb-2">
-          📍 Planogramă Magazin
+          📍 Store Planogram
         </h1>
         <p className="text-gray-600">
-          Creează aspectul magazinului tău. Trage elemente pe canvas și organizează produsele pe rafturi.
+          Create your store layout. Drag elements to canvas and organize products on shelves.
         </p>
       </div>
 
       <div className="flex gap-6">
         {/* Toolbar */}
         <Card className="w-64 p-4 h-fit">
-          <h2 className="text-lg font-semibold mb-4">🛠️ Elemente</h2>
+          <h2 className="text-lg font-semibold mb-4">🛠️ Elements</h2>
           <div className="space-y-3">
             {[
-              { type: 'door' as const, icon: '🚪', label: 'Ușă', color: 'bg-amber-100' },
+              { type: 'door' as const, icon: '🚪', label: 'Door', color: 'bg-amber-100' },
               {
                 type: 'fridge' as const,
                 icon: '❄️',
-                label: 'Frigider',
+                label: 'Fridge',
                 color: 'bg-blue-100',
               },
               {
                 type: 'shelf' as const,
                 icon: '📦',
-                label: 'Raft',
+                label: 'Shelf',
                 color: 'bg-green-100',
               },
               {
                 type: 'cashier' as const,
                 icon: '💰',
-                label: 'Casă',
+                label: 'Cashier',
                 color: 'bg-purple-100',
               },
             ].map((item) => (
@@ -718,25 +718,25 @@ const StorePlanogram: React.FC = () => {
               variant="default"
             >
               <Save className="w-4 h-4 mr-2" />
-              Salvează Planograma
+              Save Planogram
             </Button>
             <Button onClick={exportAsImage} className="w-full" variant="outline">
               <Image className="w-4 h-4 mr-2" />
-              Exportă ca Imagine
+              Export as Image
             </Button>
             <Button onClick={exportAsPDF} className="w-full" variant="outline">
               <FileText className="w-4 h-4 mr-2" />
-              Exportă ca PDF
+              Export as PDF
             </Button>
             <Button onClick={exportPlanogram} className="w-full" variant="outline">
               <Download className="w-4 h-4 mr-2" />
-              Exportă JSON
+              Export JSON
             </Button>
             <label htmlFor="import-file" className="block">
               <Button type="button" className="w-full" variant="outline" asChild>
                 <span>
                   <Upload className="w-4 h-4 mr-2" />
-                  Importă JSON
+                  Import JSON
                 </span>
               </Button>
               <input
@@ -749,7 +749,7 @@ const StorePlanogram: React.FC = () => {
             </label>
             <Button onClick={clearPlanogram} className="w-full" variant="outline">
               <Trash2 className="w-4 h-4 mr-2" />
-              Șterge Tot
+              Clear All
             </Button>
           </div>
         </Card>
@@ -757,9 +757,9 @@ const StorePlanogram: React.FC = () => {
         {/* Canvas */}
         <Card className="flex-1">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold">🏪 Canvas Magazin</h2>
+            <h2 className="text-lg font-semibold">🏪 Store Canvas</h2>
             <p className="text-sm text-gray-600">
-              Trage elemente din stânga pentru a le plasa în magazin. Clic pe rafturi/frigidere pentru a adăuga produse.
+              Drag elements from the left to place them in the store. Click on shelves/fridges to add products.
             </p>
           </div>
           <div
@@ -848,15 +848,15 @@ const StorePlanogram: React.FC = () => {
           <DialogHeader>
             <DialogTitle>
               {selectedItem?.type === 'fridge' ? '❄️ ' : '📦 '}
-              {selectedItem?.name} - Produse
+              {selectedItem?.name} - Products
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="h-96 pr-4">
             <div className="space-y-4">
               {editingShelves.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>Niciun raft adăugat încă.</p>
-                  <p className="text-sm">Apasă pe "Adaugă Raft" pentru a începe.</p>
+                  <p>No shelves added yet.</p>
+                  <p className="text-sm">Click "Add Shelf" to begin.</p>
                 </div>
               ) : (
                 editingShelves.map((shelf, index) => (
@@ -866,10 +866,10 @@ const StorePlanogram: React.FC = () => {
                         <Label className="font-bold text-primary">Raft #{shelf.shelfNumber}</Label>
                       </div>
                       <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Denumire Produs</Label>
+                        <Label className="text-xs text-muted-foreground">Product Name</Label>
                         <Input
                           type="text"
-                          placeholder="Ex: Lapte, Pâine, Apă..."
+                          placeholder="Ex: Milk, Bread, Water..."
                           value={shelf.productName}
                           onChange={(e) =>
                             updateShelfRow(index, 'productName', e.target.value)
@@ -878,7 +878,7 @@ const StorePlanogram: React.FC = () => {
                         />
                       </div>
                       <div className="w-32">
-                        <Label className="text-xs text-muted-foreground">Cantitate</Label>
+                        <Label className="text-xs text-muted-foreground">Quantity</Label>
                         <Input
                           type="number"
                           value={shelf.quantity}
@@ -903,7 +903,7 @@ const StorePlanogram: React.FC = () => {
               )}
               <Button onClick={addShelfRow} variant="outline" className="w-full">
                 <Plus className="w-4 h-4 mr-2" />
-                Adaugă Raft
+                Add Shelf
               </Button>
             </div>
           </ScrollArea>
@@ -913,7 +913,7 @@ const StorePlanogram: React.FC = () => {
               onClick={() => setShowProductDialog(false)}
               disabled={isSaving}
             >
-              Închide
+              Close
             </Button>
             <Button 
               type="button" 
@@ -925,12 +925,12 @@ const StorePlanogram: React.FC = () => {
               {isSaving ? (
                 <>
                   <span className="animate-spin mr-2">⏳</span>
-                  Salvare...
+                  Saving...
                 </>
               ) : (
                 <>
                   <Save className="w-5 h-5 mr-2" />
-                  SALVEAZĂ
+                  SAVE
                 </>
               )}
             </Button>
